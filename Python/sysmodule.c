@@ -558,7 +558,7 @@ trace_trampoline(PyObject *self, PyFrameObject *frame,
         return 0;
     result = call_trampoline(callback, frame, what, arg);
     if (result == NULL) {
-        PyEval_SetTrace(NULL, NULL);
+        PyEval_TempResetSetTrace();
         Py_CLEAR(frame->f_trace);
         return -1;
     }

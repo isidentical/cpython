@@ -486,6 +486,7 @@ class RaisingTraceFuncTestCase(unittest.TestCase):
         if event == self.raiseOnEvent:
             raise ValueError # just something that isn't RuntimeError
         else:
+            print(1)
             return self.trace
 
     def f(self):

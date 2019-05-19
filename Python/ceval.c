@@ -4590,6 +4590,18 @@ PyEval_SetTrace(Py_tracefunc func, PyObject *arg)
 }
 
 void
+PyEval_TempResetSetTrace()
+{
+    _PyRuntimeState *runtime = &_PyRuntime;
+    PyThreadState *tstate = _PyRuntimeState_GetThreadState(runtime);
+    Py_tracefunc tracefunc = tstate->c_tracefunc;
+    PyObject *traceobj = tstate->c_traceobj;
+    Py_XINCREF(traceobj);
+    PyEval_SetTrace(NULL, NULL);
+    PyEval_SetTrace(tracefunc, traceobj);
+}
+
+void
 _PyEval_SetCoroutineOriginTrackingDepth(int new_depth)
 {
     assert(new_depth >= 0);
