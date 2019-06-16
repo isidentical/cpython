@@ -83,3 +83,4 @@
 /* New in 3.5 */
 #define Py_tp_finalize 80
 #endif
+#define Py_nb_torange 81

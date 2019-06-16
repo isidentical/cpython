@@ -5097,6 +5097,7 @@ inherit_slots(PyTypeObject *type, PyTypeObject *base)
         COPYNUM(nb_index);
         COPYNUM(nb_matrix_multiply);
         COPYNUM(nb_inplace_matrix_multiply);
+        COPYNUM(nb_torange);
     }
 
     if (type->tp_as_async != NULL && base->tp_as_async != NULL) {
@@ -6316,6 +6317,7 @@ SLOT1BIN(slot_nb_multiply, nb_multiply, "__mul__", "__rmul__")
 SLOT1BIN(slot_nb_matrix_multiply, nb_matrix_multiply, "__matmul__", "__rmatmul__")
 SLOT1BIN(slot_nb_remainder, nb_remainder, "__mod__", "__rmod__")
 SLOT1BIN(slot_nb_divmod, nb_divmod, "__divmod__", "__rdivmod__")
+SLOT1BIN(slot_nb_torange, nb_torange, "__torange__", "__fromrange__")
 
 static PyObject *slot_nb_power(PyObject *, PyObject *, PyObject *);
 
@@ -7012,6 +7014,10 @@ static slotdef slotdefs[] = {
            "%"),
     RBINSLOT("__rmod__", nb_remainder, slot_nb_remainder,
            "%"),
+    BINSLOT("__torange__", nb_torange, slot_nb_torange,
+           "$"),
+    RBINSLOT("__fromrange__", nb_torange, slot_nb_torange,
+           "$"),
     BINSLOTNOTINFIX("__divmod__", nb_divmod, slot_nb_divmod,
            "Return divmod(self, value)."),
     RBINSLOTNOTINFIX("__rdivmod__", nb_divmod, slot_nb_divmod,

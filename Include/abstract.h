@@ -407,6 +407,8 @@ PyAPI_FUNC(PyObject *) PyNumber_Multiply(PyObject *o1, PyObject *o2);
 PyAPI_FUNC(PyObject *) PyNumber_MatrixMultiply(PyObject *o1, PyObject *o2);
 #endif
 
+PyAPI_FUNC(PyObject *) PyNumber_ToRange(PyObject *o1, PyObject *o2);
+
 /* Returns the result of dividing o1 by o2 giving an integral result,
    or NULL on failure.
 

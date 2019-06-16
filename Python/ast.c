@@ -994,6 +994,8 @@ get_operator(struct compiling *c, const node *n)
             return FloorDiv;
         case PERCENT:
             return Mod;
+        case TORANGE:
+            return ToRange;
         default:
             return (operator_ty)0;
     }

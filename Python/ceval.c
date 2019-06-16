@@ -1492,6 +1492,18 @@ main_loop:
             DISPATCH();
         }
 
+        case TARGET(BINARY_TORANGE): {
+            PyObject *right = POP();
+            PyObject *left = TOP();
+            PyObject *res = PyNumber_ToRange(left, right);
+            Py_DECREF(left);
+            Py_DECREF(right);
+            SET_TOP(res);
+            if (res == NULL)
+                goto error;
+            DISPATCH();
+        }
+        
         case TARGET(BINARY_TRUE_DIVIDE): {
             PyObject *divisor = POP();
             PyObject *dividend = TOP();

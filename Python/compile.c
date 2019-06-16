@@ -911,6 +911,7 @@ stack_effect(int opcode, int oparg, int jump)
         case BINARY_SUBSCR:
         case BINARY_FLOOR_DIVIDE:
         case BINARY_TRUE_DIVIDE:
+        case BINARY_TORANGE:
             return -1;
         case INPLACE_FLOOR_DIVIDE:
         case INPLACE_TRUE_DIVIDE:
@@ -3336,6 +3337,8 @@ binop(struct compiler *c, operator_ty op)
         return BINARY_AND;
     case FloorDiv:
         return BINARY_FLOOR_DIVIDE;
+    case ToRange:
+        return BINARY_TORANGE;
     default:
         PyErr_Format(PyExc_SystemError,
             "binary op %d should not be possible", op);

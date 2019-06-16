@@ -1009,6 +1009,12 @@ PyNumber_MatrixMultiply(PyObject *v, PyObject *w)
 }
 
 PyObject *
+PyNumber_ToRange(PyObject *v, PyObject *w)
+{
+    return binary_op(v, w, NB_SLOT(nb_torange), "$");
+}
+
+PyObject *
 PyNumber_FloorDivide(PyObject *v, PyObject *w)
 {
     return binary_op(v, w, NB_SLOT(nb_floor_divide), "//");

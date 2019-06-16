@@ -201,6 +201,10 @@
 
    Token value for ``":="``.
 
+.. data:: TORANGE
+
+   Token value for ``"$"``.
+
 .. data:: OP
 
 .. data:: AWAIT
