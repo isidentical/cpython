@@ -568,17 +568,17 @@ class _Unparser(NodeVisitor):
         self._buffer = []
         self._indent = 0
 
-    def interleave(self, inter, f, seq):
+    def interleave(self, inter, f, seq, **kwargs):
         """Call f on each item in seq, calling inter() in between."""
         seq = iter(seq)
         try:
-            f(next(seq))
+            f(next(seq), **kwargs)
         except StopIteration:
             pass
         else:
             for x in seq:
                 inter()
-                f(x)
+                f(x, **kwargs)
 
     def fill(self, text = ""):
         """Indent a piece of text and append it, according to the current
@@ -607,11 +607,22 @@ class _Unparser(NodeVisitor):
         yield
         self._indent -= 1
 
-    def traverse(self, node):
+    @contextmanager
+    def add_parens(self, node):
+        """Adds parenthesis before and after expressions if
+        neeeded"""
+        if node.over_precedence:
+            self.write("(")
+        yield
+        if node.over_precedence:
+            self.write(")")
+
+    def traverse(self, node, *, over_precedence = True):
         if isinstance(node, list):
             for item in node:
-                self.traverse(item)
+                self.traverse(item, over_precedence = over_precedence)
         else:
+            node.over_precedence = over_precedence
             super().visit(node)
 
     def visit(self, node):
@@ -624,17 +635,6 @@ class _Unparser(NodeVisitor):
     def visit_Module(self, node):
         for subnode in node.body:
             self.traverse(subnode)
-
-    def visit_Expr(self, node):
-        self.fill()
-        self.traverse(node.value)
-
-    def visit_NamedExpr(self, node):
-        self.write("(")
-        self.traverse(node.target)
-        self.write(" := ")
-        self.traverse(node.value)
-        self.write(")")
 
     def visit_Import(self, node):
         self.fill("import ")
@@ -708,30 +708,6 @@ class _Unparser(NodeVisitor):
         self.fill("nonlocal ")
         self.interleave(lambda: self.write(", "), self.write, node.names)
 
-    def visit_Await(self, node):
-        self.write("(")
-        self.write("await")
-        if node.value:
-            self.write(" ")
-            self.traverse(node.value)
-        self.write(")")
-
-    def visit_Yield(self, node):
-        self.write("(")
-        self.write("yield")
-        if node.value:
-            self.write(" ")
-            self.traverse(node.value)
-        self.write(")")
-
-    def visit_YieldFrom(self, node):
-        self.write("(")
-        self.write("yield from")
-        if node.value:
-            self.write(" ")
-            self.traverse(node.value)
-        self.write(")")
-
     def visit_Raise(self, node):
         self.fill("raise")
         if not node.exc:
@@ -776,7 +752,9 @@ class _Unparser(NodeVisitor):
             self.fill("@")
             self.traverse(deco)
         self.fill("class "+node.name)
-        self.write("(")
+        start_parens = node.bases or node.keywords
+        if start_parens:
+            self.write("(")
         comma = False
         for e in node.bases:
             if comma:
@@ -790,7 +768,8 @@ class _Unparser(NodeVisitor):
             else:
                 comma = True
             self.traverse(e)
-        self.write(")")
+        if start_parens:
+            self.write(")")
 
         with self.enter():
             self.traverse(node.body)
@@ -874,6 +853,84 @@ class _Unparser(NodeVisitor):
         self.interleave(lambda: self.write(", "), self.traverse, node.items)
         with self.enter():
             self.traverse(node.body)
+
+    def visit_Expr(self, node):
+        self.fill()
+        self.traverse(node.value, over_precedence = False)
+
+    def visit_NamedExpr(self, node):
+        node.over_precedence = True
+        with self.add_parens(node):
+            self.traverse(node.target, over_precedence = True)
+            self.write(" := ")
+            self.traverse(node.value, over_precedence = True)
+
+    def visit_Await(self, node):
+        with self.add_parens(node):
+            self.write("await")
+            if node.value:
+                self.write(" ")
+                self.traverse(node.value, over_precedence = True)
+
+    def visit_Yield(self, node):
+        with self.add_parens(node):
+            self.write("yield")
+            if node.value:
+                self.write(" ")
+                self.traverse(node.value, over_precedence = True)
+
+    def visit_YieldFrom(self, node):
+        with self.add_parens(node):
+            self.write("yield from")
+            if node.value:
+                self.write(" ")
+                self.traverse(node.value, over_precedence = True)
+
+    def visit_Lambda(self, node):
+        with self.add_parens(node):
+            self.write("lambda ")
+            self.traverse(node.args)
+            self.write(": ")
+            self.traverse(node.body, over_precedence = True)
+
+    def visit_IfExp(self, node):
+        with self.add_parens(node):
+            self.traverse(node.body)
+            self.write(" if ")
+            self.traverse(node.test)
+            self.write(" else ")
+            self.traverse(node.orelse)
+
+    unop = {"Invert":"~", "Not": "not", "UAdd":"+", "USub":"-"}
+    def visit_UnaryOp(self, node):
+        with self.add_parens(node):
+            self.write(self.unop[node.op.__class__.__name__])
+            self.write(" ")
+            self.traverse(node.operand, over_precedence = True)
+
+    binop = { "Add":"+", "Sub":"-", "Mult":"*", "MatMult":"@", "Div":"/", "Mod":"%",
+                    "LShift":"<<", "RShift":">>", "BitOr":"|", "BitXor":"^", "BitAnd":"&",
+                    "FloorDiv":"//", "Pow": "**"}
+    def visit_BinOp(self, node):
+        with self.add_parens(node):
+            self.traverse(node.left, over_precedence = True)
+            self.write(" " + self.binop[node.op.__class__.__name__] + " ")
+            self.traverse(node.right, over_precedence = True)
+
+    cmpops = {"Eq":"==", "NotEq":"!=", "Lt":"<", "LtE":"<=", "Gt":">", "GtE":">=",
+                        "Is":"is", "IsNot":"is not", "In":"in", "NotIn":"not in"}
+    def visit_Compare(self, node):
+        with self.add_parens(node):
+            self.traverse(node.left, over_precedence = True)
+            for o, e in zip(node.ops, node.comparators):
+                self.write(" " + self.cmpops[o.__class__.__name__] + " ")
+                self.traverse(e, over_precedence = True)
+
+    boolops = {And: 'and', Or: 'or'}
+    def visit_BoolOp(self, node):
+        with self.add_parens(node):
+            s = " %s " % self.boolops[node.op.__class__]
+            self.interleave(lambda: self.write(s), self.traverse, node.values, over_precedence = True)
 
     def visit_JoinedStr(self, node):
         self.write("f")
@@ -987,14 +1044,6 @@ class _Unparser(NodeVisitor):
             self.write(" if ")
             self.traverse(if_clause)
 
-    def visit_IfExp(self, node):
-        self.write("(")
-        self.traverse(node.body)
-        self.write(" if ")
-        self.traverse(node.test)
-        self.write(" else ")
-        self.traverse(node.orelse)
-        self.write(")")
 
     def visit_Set(self, node):
         if not node.elts:
@@ -1030,41 +1079,6 @@ class _Unparser(NodeVisitor):
             self.write(",")
         else:
             self.interleave(lambda: self.write(", "), self.traverse, node.elts)
-        self.write(")")
-
-    unop = {"Invert":"~", "Not": "not", "UAdd":"+", "USub":"-"}
-    def visit_UnaryOp(self, node):
-        self.write("(")
-        self.write(self.unop[node.op.__class__.__name__])
-        self.write(" ")
-        self.traverse(node.operand)
-        self.write(")")
-
-    binop = { "Add":"+", "Sub":"-", "Mult":"*", "MatMult":"@", "Div":"/", "Mod":"%",
-                    "LShift":"<<", "RShift":">>", "BitOr":"|", "BitXor":"^", "BitAnd":"&",
-                    "FloorDiv":"//", "Pow": "**"}
-    def visit_BinOp(self, node):
-        self.write("(")
-        self.traverse(node.left)
-        self.write(" " + self.binop[node.op.__class__.__name__] + " ")
-        self.traverse(node.right)
-        self.write(")")
-
-    cmpops = {"Eq":"==", "NotEq":"!=", "Lt":"<", "LtE":"<=", "Gt":">", "GtE":">=",
-                        "Is":"is", "IsNot":"is not", "In":"in", "NotIn":"not in"}
-    def visit_Compare(self, node):
-        self.write("(")
-        self.traverse(node.left)
-        for o, e in zip(node.ops, node.comparators):
-            self.write(" " + self.cmpops[o.__class__.__name__] + " ")
-            self.traverse(e)
-        self.write(")")
-
-    boolops = {And: 'and', Or: 'or'}
-    def visit_BoolOp(self, node):
-        self.write("(")
-        s = " %s " % self.boolops[node.op.__class__]
-        self.interleave(lambda: self.write(s), self.traverse, node.values)
         self.write(")")
 
     def visit_Attribute(self,node):
@@ -1187,14 +1201,6 @@ class _Unparser(NodeVisitor):
             self.write(node.arg)
             self.write("=")
         self.traverse(node.value)
-
-    def visit_Lambda(self, node):
-        self.write("(")
-        self.write("lambda ")
-        self.traverse(node.args)
-        self.write(": ")
-        self.traverse(node.body)
-        self.write(")")
 
     def visit_alias(self, node):
         self.write(node.name)

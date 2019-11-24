@@ -114,6 +114,13 @@ class ASTTestCase(unittest.TestCase):
     def assertASTEqual(self, ast1, ast2):
         self.assertEqual(ast.dump(ast1), ast.dump(ast2))
 
+    def check_src_roundtrip(self, code1, code2=None, strip=True):
+        code2 = code1 or code2
+        code1 = ast.unparse(ast.parse(code1))
+        if strip:
+            code1 = code1.strip()
+        self.assertEqual(code1, code2)
+
     def check_roundtrip(self, code1):
         ast1 = ast.parse(code1)
         code2 = ast.unparse(ast1)
@@ -272,6 +279,31 @@ class UnparseTestCase(ASTTestCase):
 
     def test_invalid_set(self):
         self.check_invalid(ast.Set(elts=[]))
+
+
+class CosmeticTestCase(ASTTestCase):
+    """Test if there are cosmetic issues caused by unnecesary additions,
+       and isn't making this fully roundtrippable to original source"""
+
+    def test_simple_expressions_parens(self):
+        self.check_src_roundtrip("(a := b)")
+        self.check_src_roundtrip("yield x")
+        self.check_src_roundtrip("yield from x")
+        self.check_src_roundtrip("await x")
+        self.check_src_roundtrip("x if x else y")
+        self.check_src_roundtrip("lambda x: x")
+        self.check_src_roundtrip("1 + 1")
+        self.check_src_roundtrip("~ x")
+        self.check_src_roundtrip("x and y")
+
+    def test_class_bases_and_keywords(self):
+        self.check_src_roundtrip("class X:\n    pass")
+        self.check_src_roundtrip("class X(A):\n    pass")
+        self.check_src_roundtrip("class X(A, B, C, D):\n    pass")
+        self.check_src_roundtrip("class X(x=y):\n    pass")
+        self.check_src_roundtrip("class X(metaclass=z):\n    pass")
+        self.check_src_roundtrip("class X(x=y, z=d):\n    pass")
+        self.check_src_roundtrip("class X(A, x=y):\n    pass")
 
 
 class DirectoryTestCase(ASTTestCase):
