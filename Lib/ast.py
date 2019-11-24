@@ -27,7 +27,7 @@
 import sys
 from _ast import *
 from contextlib import contextmanager
-
+from enum import IntEnum, auto
 
 def parse(source, filename='<unknown>', mode='exec', *,
           type_comments=False, feature_version=None):
@@ -557,6 +557,26 @@ _const_node_type_names = {
 # We unparse those infinities to INFSTR.
 _INFSTR = "1e" + repr(sys.float_info.max_10_exp + 1)
 
+class _Levels(IntEnum):
+    PR_TUPLE = auto()
+    PR_TEST = auto()            # 'if'-'else', 'lambda' 
+    PR_OR = auto()              # 'or' 
+    PR_AND = auto()             # 'and' 
+    PR_NOT = auto()             # 'not' 
+    PR_CMP = auto()             # '<', '>', '==', '>=', '<=', '!=',
+                                # 'in', 'not in', 'is', 'is not' 
+    PR_YIELD = auto()           # 'yield', 'yield from'
+    PR_EXPR = auto()
+    PR_BOR = PR_EXPR            # '|' 
+    PR_BXOR = auto()            # '^' 
+    PR_BAND = auto()            # '&' 
+    PR_SHIFT = auto()           # '<<', '>>' 
+    PR_ARITH = auto()           # '+', '-' 
+    PR_TERM = auto()            # '*', '@', '/', '%', '//' 
+    PR_FACTOR = auto()          # unary '+', '-', '~' 
+    PR_POWER = auto()           # '**'
+    PR_AWAIT = auto()           # 'await'
+    PR_ATOM = auto()
 
 class _Unparser(NodeVisitor):
     """Methods in this class recursively traverse an AST and
@@ -608,28 +628,28 @@ class _Unparser(NodeVisitor):
         self._indent -= 1
 
     @contextmanager
-    def add_parens(self, node):
+    def conditional_delimeter(self, condition, delimit="()"):
         """Adds parenthesis before and after expressions if
         neeeded"""
-        if node.over_precedence:
-            self.write("(")
+        if condition:
+            self.write(delimit[0])
         yield
-        if node.over_precedence:
-            self.write(")")
+        if condition:
+            self.write(delimit[-1])
 
-    def traverse(self, node, *, over_precedence = True):
+    def traverse(self, node, *, level=_Levels.PR_TEST):
         if isinstance(node, list):
             for item in node:
-                self.traverse(item, over_precedence = over_precedence)
+                self.traverse(item, level = level)
         else:
-            node.over_precedence = over_precedence
+            node._precedence_level = level
             super().visit(node)
 
-    def visit(self, node):
+    def visit(self, node, *, level=_Levels.PR_TEST):
         """Outputs a source code that can be converted again and generate
         the same AST with given tree."""
         self._source = []
-        self.traverse(node)
+        self.traverse(node, level=level)
         return "".join(self._source)
 
     def visit_Module(self, node):
@@ -752,24 +772,20 @@ class _Unparser(NodeVisitor):
             self.fill("@")
             self.traverse(deco)
         self.fill("class "+node.name)
-        start_parens = node.bases or node.keywords
-        if start_parens:
-            self.write("(")
-        comma = False
-        for e in node.bases:
-            if comma:
-                self.write(", ")
-            else:
-                comma = True
-            self.traverse(e)
-        for e in node.keywords:
-            if comma:
-                self.write(", ")
-            else:
-                comma = True
-            self.traverse(e)
-        if start_parens:
-            self.write(")")
+        with self.conditional_delimeter(node.bases or node.keywords):
+            comma = False
+            for e in node.bases:
+                if comma:
+                    self.write(", ")
+                else:
+                    comma = True
+                self.traverse(e)
+            for e in node.keywords:
+                if comma:
+                    self.write(", ")
+                else:
+                    comma = True
+                self.traverse(e)
 
         with self.enter():
             self.traverse(node.body)
@@ -856,81 +872,108 @@ class _Unparser(NodeVisitor):
 
     def visit_Expr(self, node):
         self.fill()
-        self.traverse(node.value, over_precedence = False)
+        self.traverse(node.value, level = _Levels.PR_TEST)
 
     def visit_NamedExpr(self, node):
-        node.over_precedence = True
-        with self.add_parens(node):
-            self.traverse(node.target, over_precedence = True)
+        with self.conditional_delimeter(node._precedence_level > _Levels.PR_TUPLE):
+            self.traverse(node.target, level = _Levels.PR_ATOM)
             self.write(" := ")
-            self.traverse(node.value, over_precedence = True)
+            self.traverse(node.value, level = _Levels.PR_ATOM)
 
     def visit_Await(self, node):
-        with self.add_parens(node):
+        with self.conditional_delimeter(node._precedence_level > _Levels.PR_AWAIT):
             self.write("await")
             if node.value:
                 self.write(" ")
-                self.traverse(node.value, over_precedence = True)
+                self.traverse(node.value, level = _Levels.PR_ATOM)
 
     def visit_Yield(self, node):
-        with self.add_parens(node):
+        with self.conditional_delimeter(node._precedence_level > _Levels.PR_YIELD):
             self.write("yield")
             if node.value:
                 self.write(" ")
-                self.traverse(node.value, over_precedence = True)
+                self.traverse(node.value, level = _Levels.PR_ATOM)
 
     def visit_YieldFrom(self, node):
-        with self.add_parens(node):
+        with self.conditional_delimeter(node._precedence_level > _Levels.PR_YIELD):
             self.write("yield from")
             if node.value:
                 self.write(" ")
-                self.traverse(node.value, over_precedence = True)
+                self.traverse(node.value, level = _Levels.PR_ATOM)
 
     def visit_Lambda(self, node):
-        with self.add_parens(node):
+        with self.conditional_delimeter(node._precedence_level > _Levels.PR_TEST):
             self.write("lambda ")
             self.traverse(node.args)
             self.write(": ")
-            self.traverse(node.body, over_precedence = True)
+            self.traverse(node.body, level = _Levels.PR_TEST)
 
     def visit_IfExp(self, node):
-        with self.add_parens(node):
-            self.traverse(node.body)
+        with self.conditional_delimeter(node._precedence_level > _Levels.PR_TEST):
+            self.traverse(node.body, level = _Levels.PR_TEST + 1)
             self.write(" if ")
-            self.traverse(node.test)
+            self.traverse(node.test, level = _Levels.PR_TEST + 1)
             self.write(" else ")
-            self.traverse(node.orelse)
+            self.traverse(node.orelse, level = _Levels.PR_TEST)
 
+    
     unop = {"Invert":"~", "Not": "not", "UAdd":"+", "USub":"-"}
+    unop_precedence = {"~": _Levels.PR_FACTOR, "not": _Levels.PR_NOT, 
+                       "+": _Levels.PR_FACTOR, "-": _Levels.PR_FACTOR}
     def visit_UnaryOp(self, node):
-        with self.add_parens(node):
-            self.write(self.unop[node.op.__class__.__name__])
+        operator = self.unop[node.op.__class__.__name__]
+        operator_precedence = self.unop_precedence[operator]
+        with self.conditional_delimeter(node._precedence_level > operator_precedence):
+            self.write(operator)
             self.write(" ")
-            self.traverse(node.operand, over_precedence = True)
+            self.traverse(node.operand, level = operator_precedence)
 
     binop = { "Add":"+", "Sub":"-", "Mult":"*", "MatMult":"@", "Div":"/", "Mod":"%",
                     "LShift":"<<", "RShift":">>", "BitOr":"|", "BitXor":"^", "BitAnd":"&",
                     "FloorDiv":"//", "Pow": "**"}
+    
+    binop_precedence = {
+        "+": _Levels.PR_ARITH, "-": _Levels.PR_ARITH, "*": _Levels.PR_TERM,
+        "@": _Levels.PR_TERM, "/": _Levels.PR_TERM, "%": _Levels.PR_TERM,
+        "<<": _Levels.PR_SHIFT, ">>": _Levels.PR_SHIFT, "|": _Levels.PR_BOR,
+        "^": _Levels.PR_BXOR, "&": _Levels.PR_BAND, "//": _Levels.PR_TERM,
+        "**": _Levels.PR_POWER
+    }
+
+    binop_rassoc = {"**": True}
     def visit_BinOp(self, node):
-        with self.add_parens(node):
-            self.traverse(node.left, over_precedence = True)
-            self.write(" " + self.binop[node.op.__class__.__name__] + " ")
-            self.traverse(node.right, over_precedence = True)
+        operator = self.binop[node.op.__class__.__name__]
+        operator_precedence = self.binop_precedence[operator]
+        rassoc = self.binop_rassoc.get(operator, False)
+        with self.conditional_delimeter(node._precedence_level > operator_precedence):
+            self.traverse(node.left, level = operator_precedence + int(rassoc))
+            self.write(" " + operator + " ")
+            self.traverse(node.right, level = operator_precedence + int(not rassoc))
 
     cmpops = {"Eq":"==", "NotEq":"!=", "Lt":"<", "LtE":"<=", "Gt":">", "GtE":">=",
                         "Is":"is", "IsNot":"is not", "In":"in", "NotIn":"not in"}
     def visit_Compare(self, node):
-        with self.add_parens(node):
-            self.traverse(node.left, over_precedence = True)
+        with self.conditional_delimeter(node._precedence_level > _Levels.PR_CMP):
+            self.traverse(node.left, level = _Levels.PR_CMP + 1)
             for o, e in zip(node.ops, node.comparators):
                 self.write(" " + self.cmpops[o.__class__.__name__] + " ")
-                self.traverse(e, over_precedence = True)
+                self.traverse(e, level = _Levels.PR_CMP + 1)
 
     boolops = {And: 'and', Or: 'or'}
+    boolop_precedence = {"and": _Levels.PR_AND, "or": _Levels.PR_OR}
     def visit_BoolOp(self, node):
-        with self.add_parens(node):
-            s = " %s " % self.boolops[node.op.__class__]
-            self.interleave(lambda: self.write(s), self.traverse, node.values, over_precedence = True)
+        operator = self.boolops[node.op.__class__]
+        operator_precedence = self.boolop_precedence[operator]
+        level = operator_precedence
+
+        def increasing_level_traverse(node):
+            nonlocal level
+            level += 1
+            self.traverse(node, level = level)
+
+        with self.conditional_delimeter(node._precedence_level > operator_precedence):
+            s = " %s " % operator
+            self.interleave(lambda: self.write(s), increasing_level_traverse, node.values)
 
     def visit_JoinedStr(self, node):
         self.write("f")
@@ -955,7 +998,7 @@ class _Unparser(NodeVisitor):
 
     def _fstring_FormattedValue(self, node, write):
         write("{")
-        expr = type(self)().visit(node.value).rstrip("\n")
+        expr = type(self)().visit(node.value, level=_Levels.PR_TEST + 1).rstrip("\n")
         if expr.startswith("{"):
             write(" ")  # Separate pair of opening brackets as "{ {"
         write(expr)
@@ -1037,12 +1080,12 @@ class _Unparser(NodeVisitor):
             self.write(" async for ")
         else:
             self.write(" for ")
-        self.traverse(node.target)
+        self.traverse(node.target, level=_Levels.PR_TUPLE)
         self.write(" in ")
-        self.traverse(node.iter)
+        self.traverse(node.iter, level=_Levels.PR_TEST + 1)
         for if_clause in node.ifs:
             self.write(" if ")
-            self.traverse(if_clause)
+            self.traverse(if_clause, level=_Levels.PR_TEST + 1)
 
 
     def visit_Set(self, node):
@@ -1065,7 +1108,7 @@ class _Unparser(NodeVisitor):
                 # for dictionary unpacking operator in dicts {**{'y': 2}}
                 # see PEP 448 for details
                 self.write("**")
-                self.traverse(v)
+                self.traverse(v, level=_Levels.PR_EXPR)
             else:
                 write_key_value_pair(k, v)
         self.interleave(lambda: self.write(", "), write_item, zip(node.keys, node.values))
@@ -1082,7 +1125,7 @@ class _Unparser(NodeVisitor):
         self.write(")")
 
     def visit_Attribute(self,node):
-        self.traverse(node.value)
+        self.traverse(node.value, level=_Levels.PR_ATOM)
         # Special case: 3.__abs__() is a syntax error, so if node.value
         # is an integer literal then we need to either parenthesize
         # it or add an extra space to get 3 .__abs__().
@@ -1092,7 +1135,7 @@ class _Unparser(NodeVisitor):
         self.write(node.attr)
 
     def visit_Call(self, node):
-        self.traverse(node.func)
+        self.traverse(node.func, level=_Levels.PR_ATOM)
         self.write("(")
         comma = False
         for e in node.args:
@@ -1106,20 +1149,20 @@ class _Unparser(NodeVisitor):
         self.write(")")
 
     def visit_Subscript(self, node):
-        self.traverse(node.value)
+        self.traverse(node.value, level=_Levels.PR_ATOM)
         self.write("[")
         self.traverse(node.slice)
         self.write("]")
 
     def visit_Starred(self, node):
         self.write("*")
-        self.traverse(node.value)
+        self.traverse(node.value, level=_Levels.PR_EXPR )
 
     def visit_Ellipsis(self, node):
         self.write("...")
 
     def visit_Index(self, node):
-        self.traverse(node.value)
+        self.traverse(node.value, level=_Levels.PR_TUPLE)
 
     def visit_Slice(self, node):
         if node.lower:
