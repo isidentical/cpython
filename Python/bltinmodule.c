@@ -1826,10 +1826,10 @@ builtin_pow_impl(PyObject *module, PyObject *base, PyObject *exp,
 print as builtin_print
 
     *args: object
-    sep: object(c_default="NULL") = ' '
-    end: object(c_default="NULL") = '\\n'
-    file: object(c_default="NULL") = None
-    flush: bool(c_default=0) = False
+    sep: object(c_default="Py_None") = ' '
+    end: object(c_default="NULL") = '\n'
+    file: object = None
+    flush: bool = False
 
 Prints the values to a stream, or to sys.stdout by default.
 
