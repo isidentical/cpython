@@ -628,16 +628,19 @@ exit:
 }
 
 PyDoc_STRVAR(builtin_print__doc__,
-"print($module, /, *args, sep=\' \', end=\'\\\\n\', file=None, flush=False)\n"
+"print($module, /, *args, sep=\' \', end=\'\\n\', file=None, flush=False)\n"
 "--\n"
 "\n"
 "Prints the values to a stream, or to sys.stdout by default.\n"
 "\n"
-"Optional keyword arguments:\n"
-"file:  a file-like object (stream); defaults to the current sys.stdout.\n"
-"sep:   string inserted between values, default a space.\n"
-"end:   string appended after the last value, default a newline.\n"
-"flush: whether to forcibly flush the stream.");
+"  sep\n"
+"    string inserted between values, default a space.\n"
+"  end\n"
+"    string appended after the last value, default a newline.\n"
+"  file\n"
+"    a file-like object (stream); defaults to the current sys.stdout.\n"
+"  flush\n"
+"    whether to forcibly flush the stream.");
 
 #define BUILTIN_PRINT_METHODDEF    \
     {"print", (PyCFunction)(void(*)(void))builtin_print, METH_FASTCALL|METH_KEYWORDS, builtin_print__doc__},
@@ -655,9 +658,9 @@ builtin_print(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
     PyObject *argsbuf[5];
     Py_ssize_t noptargs = 0 + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 0;
     PyObject *__clinic_args = NULL;
-    PyObject *sep = NULL;
-    PyObject *end = NULL;
-    PyObject *file = NULL;
+    PyObject *sep = Py_None;
+    PyObject *end = Py_None;
+    PyObject *file = Py_None;
     int flush = 0;
 
     args = _PyArg_UnpackKeywordsWithVararg(args, nargs, NULL, kwnames, &_parser, 0, 0, 0, 0, argsbuf);
@@ -901,4 +904,4 @@ builtin_issubclass(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=0931a7e1da399775 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=78f2bb2617127934 input=a9049054013a1b77]*/

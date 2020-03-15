@@ -1827,27 +1827,26 @@ print as builtin_print
 
     *args: object
     sep: object(c_default="Py_None") = ' '
-    end: object(c_default="NULL") = '\n'
+        string inserted between values, default a space.
+    end: object(c_default="Py_None") = '\n'
+        string appended after the last value, default a newline.
     file: object = None
+        a file-like object (stream); defaults to the current sys.stdout.
     flush: bool = False
+        whether to forcibly flush the stream.
 
 Prints the values to a stream, or to sys.stdout by default.
 
-Optional keyword arguments:
-file:  a file-like object (stream); defaults to the current sys.stdout.
-sep:   string inserted between values, default a space.
-end:   string appended after the last value, default a newline.
-flush: whether to forcibly flush the stream.
 [clinic start generated code]*/
 
 static PyObject *
 builtin_print_impl(PyObject *module, PyObject *args, PyObject *sep,
                    PyObject *end, PyObject *file, int flush)
-/*[clinic end generated code: output=3cfc0940f5bc237b input=fc06c31f642dd77b]*/
+/*[clinic end generated code: output=3cfc0940f5bc237b input=c143c575d24fe665]*/
 {
     int i, err;
 
-    if (file == NULL || file == Py_None) {
+    if (file == Py_None) {
         file = _PySys_GetObjectId(&PyId_stdout);
         if (file == NULL) {
             PyErr_SetString(PyExc_RuntimeError, "lost sys.stdout");
