@@ -627,6 +627,77 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(builtin_print__doc__,
+"print($module, /, *args, sep=\' \', end=\'\\\\n\', file=None, flush=False)\n"
+"--\n"
+"\n"
+"Prints the values to a stream, or to sys.stdout by default.\n"
+"\n"
+"Optional keyword arguments:\n"
+"file:  a file-like object (stream); defaults to the current sys.stdout.\n"
+"sep:   string inserted between values, default a space.\n"
+"end:   string appended after the last value, default a newline.\n"
+"flush: whether to forcibly flush the stream.");
+
+#define BUILTIN_PRINT_METHODDEF    \
+    {"print", (PyCFunction)(void(*)(void))builtin_print, METH_FASTCALL|METH_KEYWORDS, builtin_print__doc__},
+
+static PyObject *
+builtin_print_impl(PyObject *module, PyObject *args, PyObject *sep,
+                   PyObject *end, PyObject *file, int flush);
+
+static PyObject *
+builtin_print(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    static const char * const _keywords[] = {"sep", "end", "file", "flush", NULL};
+    static _PyArg_Parser _parser = {NULL, _keywords, "print", 0};
+    PyObject *argsbuf[5];
+    Py_ssize_t noptargs = 0 + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 0;
+    PyObject *__clinic_args = NULL;
+    PyObject *sep = NULL;
+    PyObject *end = NULL;
+    PyObject *file = NULL;
+    int flush = 0;
+
+    args = _PyArg_UnpackKeywordsWithVararg(args, nargs, NULL, kwnames, &_parser, 0, 0, 0, 0, argsbuf);
+    if (!args) {
+        goto exit;
+    }
+    __clinic_args = args[0];
+    if (!noptargs) {
+        goto skip_optional_kwonly;
+    }
+    if (args[1]) {
+        sep = args[1];
+        if (!--noptargs) {
+            goto skip_optional_kwonly;
+        }
+    }
+    if (args[2]) {
+        end = args[2];
+        if (!--noptargs) {
+            goto skip_optional_kwonly;
+        }
+    }
+    if (args[3]) {
+        file = args[3];
+        if (!--noptargs) {
+            goto skip_optional_kwonly;
+        }
+    }
+    flush = PyObject_IsTrue(args[4]);
+    if (flush < 0) {
+        goto exit;
+    }
+skip_optional_kwonly:
+    return_value = builtin_print_impl(module, __clinic_args, sep, end, file, flush);
+
+exit:
+    Py_XDECREF(__clinic_args);
+    return return_value;
+}
+
 PyDoc_STRVAR(builtin_input__doc__,
 "input($module, prompt=None, /)\n"
 "--\n"
@@ -830,4 +901,4 @@ builtin_issubclass(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=e2fcf0201790367c input=a9049054013a1b77]*/
+/*[clinic end generated code: output=0931a7e1da399775 input=a9049054013a1b77]*/

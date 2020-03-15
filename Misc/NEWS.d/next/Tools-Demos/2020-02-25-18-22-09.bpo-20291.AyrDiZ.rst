@@ -1,0 +1,2 @@
+Vararg (`*args`) notation support for Argument Clinic. Patch by Batuhan
+Taskaya.
