@@ -1,0 +1,2 @@
+Add Solaris/SunOS support to :func:`threading.get_native_id()`. Patch by
+Batuhan Taskaya.

@@ -22,6 +22,8 @@
 #   include <sys/thread.h>      /* thread_self() */
 #elif defined(__NetBSD__)
 #   include <lwp.h>             /* _lwp_self() */
+#elif defined(__sun)
+#   include <thread.h>          /* thr_self */
 #endif
 
 /* The POSIX spec requires that use of pthread_attr_setstacksize
@@ -346,6 +348,9 @@ PyThread_get_thread_native_id(void)
 #elif defined(__NetBSD__)
     lwpid_t native_id;
     native_id = _lwp_self();
+#elif defined(__sun)
+    thread_t native_id;
+    native_id = thr_self();
 #endif
     return (unsigned long) native_id;
 }
