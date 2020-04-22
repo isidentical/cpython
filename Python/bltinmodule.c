@@ -704,6 +704,7 @@ compile as builtin_compile
     optimize: int = -1
     *
     _feature_version as feature_version: int = -1
+    future_flags: int = 0
 
 Compile source into a code object that can be executed by exec() or eval().
 
@@ -722,8 +723,8 @@ in addition to any features explicitly specified.
 static PyObject *
 builtin_compile_impl(PyObject *module, PyObject *source, PyObject *filename,
                      const char *mode, int flags, int dont_inherit,
-                     int optimize, int feature_version)
-/*[clinic end generated code: output=b0c09c84f116d3d7 input=40171fb92c1d580d]*/
+                     int optimize, int feature_version, int future_flags)
+/*[clinic end generated code: output=0eb2b043b1f691c7 input=2e189d067086d888]*/
 {
     PyObject *source_copy;
     const char *str;
@@ -733,18 +734,30 @@ builtin_compile_impl(PyObject *module, PyObject *source, PyObject *filename,
     PyObject *result;
 
     PyCompilerFlags cf = _PyCompilerFlags_INIT;
-    cf.cf_flags = flags | PyCF_SOURCE_IS_UTF8;
     if (feature_version >= 0 && (flags & PyCF_ONLY_AST)) {
         cf.cf_feature_version = feature_version;
     }
 
-    if (flags &
-        ~(PyCF_MASK | PyCF_MASK_OBSOLETE | PyCF_DONT_IMPLY_DEDENT | PyCF_ONLY_AST | PyCF_TYPE_COMMENTS))
+    if (flags & ~(PyCompilerFlags_MASK | PyFutureFlags_MASK))
     {
         PyErr_SetString(PyExc_ValueError,
                         "compile(): unrecognised flags");
         goto error;
     }
+    if (flags & PyFutureFlags_MASK
+        && PyErr_WarnEx(PyExc_DeprecationWarning, "Passing future flags from "
+        "'flags' parameter is deprecated. Please use 'future_flags' parameter.", 1)) {
+        goto error;
+    }
+    if (future_flags & ~(PyFutureFlags_MASK))
+    {
+        PyErr_SetString(PyExc_ValueError,
+                        "compile(): unrecognised flags");
+        goto error;
+    }
+    cf.cf_future_flags = flags & PyFutureFlags_MASK | future_flags;
+    cf.cf_flags = flags & PyCompilerFlags_MASK;
+
     /* XXX Warn if (supplied_flags & PyCF_MASK_OBSOLETE) != 0? */
 
     if (optimize < -1 || optimize > 2) {

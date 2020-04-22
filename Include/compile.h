@@ -13,10 +13,6 @@ struct _node; /* Declare the existence of this type */
 PyAPI_FUNC(PyCodeObject *) PyNode_Compile(struct _node *, const char *);
 /* XXX (ncoghlan): Unprefixed type name in a public API! */
 
-#define PyCF_MASK (CO_FUTURE_DIVISION | CO_FUTURE_ABSOLUTE_IMPORT | \
-                   CO_FUTURE_WITH_STATEMENT | CO_FUTURE_PRINT_FUNCTION | \
-                   CO_FUTURE_UNICODE_LITERALS | CO_FUTURE_BARRY_AS_BDFL | \
-                   CO_FUTURE_GENERATOR_STOP | CO_FUTURE_ANNOTATIONS)
 #define PyCF_MASK_OBSOLETE (CO_NESTED)
 #define PyCF_SOURCE_IS_UTF8  0x0100
 #define PyCF_DONT_IMPLY_DEDENT 0x0200
@@ -24,15 +20,29 @@ PyAPI_FUNC(PyCodeObject *) PyNode_Compile(struct _node *, const char *);
 #define PyCF_IGNORE_COOKIE 0x0800
 #define PyCF_TYPE_COMMENTS 0x1000
 #define PyCF_ALLOW_TOP_LEVEL_AWAIT 0x2000
+#define PyCompilerFlags_MASK (PyCF_MASK_OBSOLETE | PyCF_SOURCE_IS_UTF8 | \
+                              PyCF_SOURCE_IS_UTF8 | PyCF_DONT_IMPLY_DEDENT | \
+                              PyCF_ONLY_AST | PyCF_TYPE_COMMENTS | \
+                              PyCF_ALLOW_TOP_LEVEL_AWAIT)
+#define PyFutureFlags_MASK (CO_FUTURE_DIVISION | CO_FUTURE_ABSOLUTE_IMPORT | \
+                            CO_FUTURE_WITH_STATEMENT | CO_FUTURE_PRINT_FUNCTION | \
+                            CO_FUTURE_UNICODE_LITERALS | CO_FUTURE_BARRY_AS_BDFL | \
+                            CO_FUTURE_GENERATOR_STOP | CO_FUTURE_ANNOTATIONS)
+#define PyCF_MASK PyFutureFlags_MASK
 
 #ifndef Py_LIMITED_API
 typedef struct {
-    int cf_flags;  /* bitmask of CO_xxx flags relevant to future */
+    int cf_flags;  /* bitmask of PyCF_xxx flags relevant to compiler */
     int cf_feature_version;  /* minor Python version (PyCF_ONLY_AST) */
+    int cf_future_flags; /* bitmask of CO_xxx flags relevant to future */ 
 } PyCompilerFlags;
 
 #define _PyCompilerFlags_INIT \
-    (PyCompilerFlags){.cf_flags = 0, .cf_feature_version = PY_MINOR_VERSION}
+    (PyCompilerFlags) { \
+        .cf_flags = 0, \
+        .cf_feature_version = PY_MINOR_VERSION, \
+        .cf_future_flags = 0 \
+    }
 #endif
 
 /* Future feature support */
