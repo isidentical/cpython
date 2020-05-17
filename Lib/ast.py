@@ -994,6 +994,7 @@ class _Unparser(NodeVisitor):
 
     def _for_helper(self, fill, node):
         self.fill(fill)
+        self.set_precedence(_Precedence.TUPLE, node.target)
         self.traverse(node.target)
         self.write(" in ")
         self.traverse(node.iter)
@@ -1096,10 +1097,10 @@ class _Unparser(NodeVisitor):
         if value:
             # Preserve quotes in the docstring by escaping them
             value = value.replace("\\", "\\\\")
-            value = value.replace('"""', '""\"')
             value = value.replace("\r", "\\r")
             if value[-1] == '"':
                 value = value.replace('"', '\\"', -1)
+            value = value.replace('"""', '""\\"')
 
         self.write(f'"""{value}"""')
 
@@ -1205,7 +1206,8 @@ class _Unparser(NodeVisitor):
             )
 
     def visit_Tuple(self, node):
-        with self.delimit("(", ")"):
+        needs_parens = self.get_precedence(node) > _Precedence.TUPLE
+        with self.delimit_if("(", ")", condition = needs_parens or len(node.elts) == 0):
             self.items_view(self.traverse, node.elts)
 
     unop = {"Invert": "~", "Not": "not", "UAdd": "+", "USub": "-"}

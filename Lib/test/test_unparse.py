@@ -324,7 +324,8 @@ class UnparseTestCase(ASTTestCase):
             '\\t',
             '\n',
             '\\n',
-            '\r\\r\t\\t\n\\n'
+            '\r\\r\t\\t\n\\n',
+            '""">>> content = \"\"\"blabla\"\"\" <<<"""'
         )
         for docstring in docstrings:
             # check as Module docstrings for easy testing
@@ -465,6 +466,17 @@ class CosmeticTestCase(ASTTestCase):
             self.check_src_roundtrip(f"{prefix}1")
         for prefix in ("not",):
             self.check_src_roundtrip(f"{prefix} 1")
+
+    def test_for_target(self):
+        for target in (
+            "x",
+            "x, y",
+            "x, y, z",
+            "x, (y,), z",
+            "x,",
+            "x, *y, (z, q), t",
+        ):
+            self.check_src_roundtrip(f"for {target} in data:\n    pass")
 
 class DirectoryTestCase(ASTTestCase):
     """Test roundtrip behaviour on all files in Lib and Lib/test."""
