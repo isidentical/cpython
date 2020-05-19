@@ -648,7 +648,6 @@ class _Unparser(NodeVisitor):
 
     def __init__(self):
         self._source = []
-        self._buffer = []
         self._precedences = {}
         self._type_ignores = {}
         self._indent = 0
@@ -690,14 +689,12 @@ class _Unparser(NodeVisitor):
         """Append a piece of text"""
         self._source.append(text)
 
-    def buffer_writer(self, text):
-        self._buffer.append(text)
-
-    @property
-    def buffer(self):
-        value = "".join(self._buffer)
-        self._buffer.clear()
-        return value
+    @contextmanager
+    def buffered(self, buffer):
+        original_source = self._source
+        self._source = buffer
+        yield
+        self._source = original_source
 
     @contextmanager
     def block(self, *, extra = None):
@@ -1048,43 +1045,41 @@ class _Unparser(NodeVisitor):
 
     def visit_JoinedStr(self, node):
         self.write("f")
-        self._fstring_JoinedStr(node, self.buffer_writer)
-        self.write(repr(self.buffer))
+        buffer = []
+        with self.buffered(buffer):
+            self._write_fstring_inner(node)
+        self.write(repr("".join(buffer)))
+
+    def _write_fstring_inner(self, node):
+        if isinstance(node, JoinedStr):
+            # for both the f-string itself, and format_spec
+            for value in node.values:
+                self._write_fstring_inner(value)
+        elif isinstance(node, Constant) and isinstance(node.value, str):
+            value = node.value.replace("{", "{{").replace("}", "}}")
+            self.write(value)
+        elif isinstance(node, FormattedValue):
+            self.visit_FormattedValue(node)
+        else:
+            raise ValueError(f"Unexpected node inside JoinedStr, {node!r}")
 
     def visit_FormattedValue(self, node):
-        self.write("f")
-        self._fstring_FormattedValue(node, self.buffer_writer)
-        self.write(repr(self.buffer))
+        def unparse_inner(inner):
+            unparser = type(self)()
+            unparser.set_precedence(_Precedence.TEST.next(), inner)
+            return unparser.visit(inner)
 
-    def _fstring_JoinedStr(self, node, write):
-        for value in node.values:
-            meth = getattr(self, "_fstring_" + type(value).__name__)
-            meth(value, write)
-
-    def _fstring_Constant(self, node, write):
-        if not isinstance(node.value, str):
-            raise ValueError("Constants inside JoinedStr should be a string.")
-        value = node.value.replace("{", "{{").replace("}", "}}")
-        write(value)
-
-    def _fstring_FormattedValue(self, node, write):
-        write("{")
-        unparser = type(self)()
-        unparser.set_precedence(_Precedence.TEST.next(), node.value)
-        expr = unparser.visit(node.value)
-        if expr.startswith("{"):
-            write(" ")  # Separate pair of opening brackets as "{ {"
-        write(expr)
-        if node.conversion != -1:
-            conversion = chr(node.conversion)
-            if conversion not in "sra":
-                raise ValueError("Unknown f-string conversion.")
-            write(f"!{conversion}")
-        if node.format_spec:
-            write(":")
-            meth = getattr(self, "_fstring_" + type(node.format_spec).__name__)
-            meth(node.format_spec, write)
-        write("}")
+        with self.delimit("{", "}"):
+            expr = unparse_inner(node.value)
+            if expr.startswith("{"):
+                # Separate pair of opening brackets as "{ {"
+                self.write(" ")
+            self.write(expr)
+            if node.conversion != -1:
+                self.write(f"!{chr(node.conversion)}")
+            if node.format_spec:
+                self.write(":")
+                self._write_fstring_inner(node.format_spec)
 
     def visit_Name(self, node):
         self.write(node.id)
