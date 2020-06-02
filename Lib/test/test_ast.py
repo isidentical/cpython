@@ -668,6 +668,20 @@ class AST_Tests(unittest.TestCase):
         with self.assertRaises(SyntaxError):
             ast.parse('f"{x=}"', feature_version=(3, 7))
 
+    def test_recursion_direct(self):
+        e = ast.UnaryOp(op=ast.Not(), lineno=0, col_offset=0)
+        e.operand = e
+        with self.assertRaises(RecursionError):
+            compile(ast.Expression(e), "<test>", "eval")
+
+    def test_recursion_indirect(self):
+        e = ast.UnaryOp(op=ast.Not(), lineno=0, col_offset=0)
+        f = ast.UnaryOp(op=ast.Not(), lineno=0, col_offset=0)
+        e.operand = f
+        f.operand = e
+        with self.assertRaises(RecursionError):
+            compile(ast.Expression(e), "<test>", "eval")
+
 
 class ASTHelpers_Test(unittest.TestCase):
     maxDiff = None
