@@ -2269,30 +2269,33 @@ expr_ty _PyPegen_collect_call_seqs(Parser *p, asdl_expr_seq *a, asdl_seq *b,
 
 
 expr_ty _PyPegen_produce_string(Parser *p, expr_ty a) {
-
-    Py_ssize_t left = a->col_offset;
-    Py_ssize_t right = a->end_col_offset;
-
-    Py_ssize_t index = left;
-    Py_ssize_t parens = 0;
-    while (p->tok->buf[index] != ':' && p->tok->buf[index] != '>') {
-        index--;
-        if (p->tok->buf[index] == '(') {
-            parens++;
-            left = index;
+    char* buffer = NULL;
+    for (int mark = p->mark; 0 <= mark; --mark) {
+        Token* token = p->tokens[mark];
+        char* value = PyBytes_AS_STRING(token->bytes);
+        if (buffer != NULL) {
+            buffer = PyMem_Realloc(buffer, 2 * (sizeof(buffer) + sizeof(value)));
+            memmove(buffer + strlen(value), buffer, strlen(buffer) + 1);
+            memcpy(buffer, value, strlen(value));
+        }
+        if (token->end_lineno == a->end_lineno
+            && token->end_col_offset == a->end_col_offset)
+        {
+            buffer = _PyMem_Strdup(value);
+        }
+        if (token->lineno == a->lineno
+            && token->col_offset == a->col_offset)
+        {
+            break;
         }
     }
 
-    index = right;
-    while (parens != 0) {
-        if (p->tok->buf[index] == ')') {
-            parens--;
-            right = index + 1;
-        }
-        index++;
+    assert(buffer != NULL);
+    PyObject *res = PyUnicode_FromString(buffer);
+    PyMem_Free(buffer);
+    if (res == NULL) {
+        return NULL;
     }
-
-    PyObject *res= PyUnicode_DecodeUTF8(p->tok->buf+left, right-left, NULL);
     if (PyArena_AddPyObject(p->arena, res) < 0) {
         Py_DECREF(res);
         return NULL;

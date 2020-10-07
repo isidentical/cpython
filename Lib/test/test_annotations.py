@@ -216,10 +216,10 @@ class PostponedAnnotationsTestCase(unittest.TestCase):
         self.assertAnnotationEqual("1e1000j")
         self.assertAnnotationEqual("-1e1000")
         self.assertAnnotationEqual("3+1e1000j")
-        self.assertAnnotationEqual("(1e1000, 1e1000j)")
+        self.assertAnnotationEqual("(1e1000,1e1000j)")
         self.assertAnnotationEqual("'inf'")
-        self.assertAnnotationEqual("('inf', 1e1000, 'infxxx', 1e1000j)")
-        self.assertAnnotationEqual("(1e1000, (1e1000j,))")
+        self.assertAnnotationEqual("('inf',1e1000,'infxxx',1e1000j)")
+        self.assertAnnotationEqual("(1e1000,(1e1000j,))")
 
 
 if __name__ == "__main__":
