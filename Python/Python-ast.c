@@ -3394,11 +3394,12 @@ PyObject*
 ast2obj_mod(astmodulestate *state, void* _o)
 {
     mod_ty o = (mod_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     switch (o->kind) {
     case Module_kind:
         tp = (PyTypeObject *)state->Module_type;
@@ -3465,11 +3466,12 @@ PyObject*
 ast2obj_stmt(astmodulestate *state, void* _o)
 {
     stmt_ty o = (stmt_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     switch (o->kind) {
     case FunctionDef_kind:
         tp = (PyTypeObject *)state->FunctionDef_type;
@@ -3980,11 +3982,12 @@ PyObject*
 ast2obj_expr(astmodulestate *state, void* _o)
 {
     expr_ty o = (expr_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     switch (o->kind) {
     case BoolOp_kind:
         tp = (PyTypeObject *)state->BoolOp_type;
@@ -4583,11 +4586,12 @@ PyObject*
 ast2obj_comprehension(astmodulestate *state, void* _o)
 {
     comprehension_ty o = (comprehension_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     tp = (PyTypeObject *)state->comprehension_type;
     result = PyType_GenericNew(tp, NULL, NULL);
     if (!result) return NULL;
@@ -4622,11 +4626,12 @@ PyObject*
 ast2obj_excepthandler(astmodulestate *state, void* _o)
 {
     excepthandler_ty o = (excepthandler_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     switch (o->kind) {
     case ExceptHandler_kind:
         tp = (PyTypeObject *)state->ExceptHandler_type;
@@ -4681,11 +4686,12 @@ PyObject*
 ast2obj_arguments(astmodulestate *state, void* _o)
 {
     arguments_ty o = (arguments_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     tp = (PyTypeObject *)state->arguments_type;
     result = PyType_GenericNew(tp, NULL, NULL);
     if (!result) return NULL;
@@ -4735,11 +4741,12 @@ PyObject*
 ast2obj_arg(astmodulestate *state, void* _o)
 {
     arg_ty o = (arg_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     tp = (PyTypeObject *)state->arg_type;
     result = PyType_GenericNew(tp, NULL, NULL);
     if (!result) return NULL;
@@ -4789,11 +4796,12 @@ PyObject*
 ast2obj_keyword(astmodulestate *state, void* _o)
 {
     keyword_ty o = (keyword_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     tp = (PyTypeObject *)state->keyword_type;
     result = PyType_GenericNew(tp, NULL, NULL);
     if (!result) return NULL;
@@ -4838,11 +4846,12 @@ PyObject*
 ast2obj_alias(astmodulestate *state, void* _o)
 {
     alias_ty o = (alias_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     tp = (PyTypeObject *)state->alias_type;
     result = PyType_GenericNew(tp, NULL, NULL);
     if (!result) return NULL;
@@ -4867,11 +4876,12 @@ PyObject*
 ast2obj_withitem(astmodulestate *state, void* _o)
 {
     withitem_ty o = (withitem_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     tp = (PyTypeObject *)state->withitem_type;
     result = PyType_GenericNew(tp, NULL, NULL);
     if (!result) return NULL;
@@ -4896,11 +4906,12 @@ PyObject*
 ast2obj_type_ignore(astmodulestate *state, void* _o)
 {
     type_ignore_ty o = (type_ignore_ty)_o;
-    PyObject *result = NULL, *value = NULL;
-    PyTypeObject *tp;
     if (!o) {
         Py_RETURN_NONE;
     }
+    PyTypeObject *tp;
+    PyObject *result = NULL;
+    PyObject *value = NULL;
     switch (o->kind) {
     case TypeIgnore_kind:
         tp = (PyTypeObject *)state->TypeIgnore_type;

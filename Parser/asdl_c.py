@@ -508,7 +508,8 @@ class Obj2ModVisitor(PickleVisitor):
         self.emit("int", 0)
         self.emit("obj2ast_%s(astmodulestate *state, PyObject* obj, %s* out, PyArena* arena)" % (name, ctype), 0)
         self.emit("{", 0)
-        self.emit("PyObject* tmp = NULL;", 1)
+        if not prod.is_bare:
+            self.emit("PyObject* tmp = NULL;", 1)
         for f in prod.fields:
             self.visitFieldDeclaration(f, name, prod=prod, depth=1)
         for a in prod.attributes:
@@ -522,9 +523,10 @@ class Obj2ModVisitor(PickleVisitor):
         args.extend([a.name for a in prod.attributes])
         self.emit("*out = %s(%s);" % (name, self.buildArgs(args)), 1)
         self.emit("return 0;", 1)
-        self.emit("failed:", 0)
-        self.emit("Py_XDECREF(tmp);", 1)
-        self.emit("return 1;", 1)
+        if not prod.is_bare:
+            self.emit("failed:", 0)
+            self.emit("Py_XDECREF(tmp);", 1)
+            self.emit("return 1;", 1)
         self.emit("}", 0)
         self.emit("", 0)
 
@@ -1166,24 +1168,27 @@ class StaticVisitor(PickleVisitor):
 
 class ObjVisitor(PickleVisitor):
 
-    def func_begin(self, name):
+    def func_begin(self, name, is_bare = False):
         ctype = get_c_type(name)
         self.emit("PyObject*", 0)
         self.emit("ast2obj_%s(astmodulestate *state, void* _o)" % (name), 0)
         self.emit("{", 0)
         self.emit("%s o = (%s)_o;" % (ctype, ctype), 1)
-        self.emit("PyObject *result = NULL, *value = NULL;", 1)
-        self.emit("PyTypeObject *tp;", 1)
         self.emit('if (!o) {', 1)
         self.emit("Py_RETURN_NONE;", 2)
         self.emit("}", 1)
+        self.emit("PyTypeObject *tp;", 1)
+        self.emit("PyObject *result = NULL;", 1)
+        if not is_bare:
+            self.emit("PyObject *value = NULL;", 1)
 
-    def func_end(self):
+    def func_end(self, is_bare = False):
         self.emit("return result;", 1)
-        self.emit("failed:", 0)
-        self.emit("Py_XDECREF(value);", 1)
-        self.emit("Py_XDECREF(result);", 1)
-        self.emit("return NULL;", 1)
+        if not is_bare:
+            self.emit("failed:", 0)
+            self.emit("Py_XDECREF(value);", 1)
+            self.emit("Py_XDECREF(result);", 1)
+            self.emit("return NULL;", 1)
         self.emit("}", 0)
         self.emit("", 0)
 
@@ -1218,7 +1223,7 @@ class ObjVisitor(PickleVisitor):
         self.emit("}", 0)
 
     def visitProduct(self, prod, name):
-        self.func_begin(name)
+        self.func_begin(name, is_bare = prod.is_bare)
         self.emit("tp = (PyTypeObject *)state->%s_type;" % name, 1)
         self.emit("result = PyType_GenericNew(tp, NULL, NULL);", 1);
         self.emit("if (!result) return NULL;", 1)
@@ -1230,7 +1235,7 @@ class ObjVisitor(PickleVisitor):
             self.emit("if (PyObject_SetAttr(result, state->%s, value) < 0)" % a.name, 1)
             self.emit('goto failed;', 2)
             self.emit('Py_DECREF(value);', 1)
-        self.func_end()
+        self.func_end(is_bare = prod.is_bare)
 
     def visitConstructor(self, cons, enum, name):
         self.emit("case %s_kind:" % cons.name, 1)

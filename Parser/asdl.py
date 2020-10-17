@@ -109,6 +109,10 @@ class Product(AST):
         self.fields = fields
         self.attributes = attributes or []
 
+    @property
+    def is_bare(self):
+        return len(self.fields) + len(self.attributes) == 0
+
     def __repr__(self):
         if self.attributes:
             return 'Product({0.fields}, {0.attributes})'.format(self)
