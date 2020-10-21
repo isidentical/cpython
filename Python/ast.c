@@ -326,11 +326,233 @@ validate_expr(expr_ty exp, expr_context_ty ctx)
 }
 
 static int
-validate_pattern(expr_ty p)
+validate_pattern_attribute(expr_ty pattern)
 {
-    // Coming soon (thanks Batuhan)!
+    if (!validate_expr(pattern, Load)) {
+        return 0;
+    }
+
+    switch (pattern->kind) {
+        case Attribute_kind:
+            return validate_pattern_attribute(pattern->v.Attribute.value);
+        case Name_kind:
+            return 1;
+        default:
+            PyErr_SetString(PyExc_ValueError,
+                            "invalid node type for an attribute pattern");
+            return 0;
+    }
+}
+
+static int
+validate_pattern(expr_ty pattern)
+{
+    PyObject *literal;
+    int op, left, right;
+    Py_ssize_t i, length;
+    asdl_expr_seq *values, *keys;
+    switch (pattern->kind) {
+        case Attribute_kind:
+            return validate_pattern_attribute(pattern);
+        case MatchOr_kind:
+            values = pattern->v.MatchOr.patterns;
+            length = asdl_seq_LEN(values);
+            if (length < 2) {
+                PyErr_SetString(PyExc_ValueError,
+                                "MatchOr expects at least 2 patterns");
+                return 0;
+            }
+            for (i = 0; i < length; i++) {
+                if (!validate_pattern(asdl_seq_GET(values, i))) {
+                    return 0;
+                }
+            }
+            return 1;
+        case Call_kind:
+            if (!validate_pattern_attribute(pattern->v.Call.func)) {
+                return 0;
+            }
+
+            values = pattern->v.Call.args;
+            length = asdl_seq_LEN(values);
+
+            expr_ty arg;
+            for (i = 0; i < length; i++) {
+                arg = asdl_seq_GET(values, i);
+                if (arg->kind == Starred_kind) {
+                    PyErr_SetString(PyExc_ValueError,
+                                    "can't use single star pattern inside of "
+                                    "a Call pattern");
+                    return 0;
+                }
+                if (!validate_pattern(arg)) {
+                    return 0;
+                }
+            }
+
+            asdl_keyword_seq *keywords = pattern->v.Call.keywords;
+            length = asdl_seq_LEN(keywords);
+            keyword_ty keyword;
+            for (i = 0; i < length; i++) {
+                keyword = asdl_seq_GET(keywords, i);
+                if (keyword->arg == Py_None) {
+                    PyErr_SetString(PyExc_ValueError,
+                                    "can't use double star pattern inside of "
+                                    "a Call pattern");
+                    return 0;
+                }
+                if (!validate_pattern(keyword->value)) {
+                    return 0;
+                }
+            }
+            return 1;
+        case Constant_kind:
+            // Ellipsis & Immutable sequences are not allowed
+            if (!validate_expr(pattern, Load)) {
+                return 0;
+            }
+            literal = pattern->v.Constant.value;
+            if (literal == Py_None || PyBool_Check(literal) ||
+                PyLong_CheckExact(literal) || PyFloat_CheckExact(literal) ||
+                PyBytes_CheckExact(literal) || PyComplex_CheckExact(literal) ||
+                PyUnicode_CheckExact(literal)) {
+                return 1;
+            }
+            PyErr_SetString(PyExc_ValueError,
+                            "unexpected constant inside of a literal pattern");
+            return 0;
+        case Dict_kind:
+            keys = pattern->v.Dict.keys;
+            values = pattern->v.Dict.values;
+            length = asdl_seq_LEN(keys);
+            if (length != asdl_seq_LEN(values)) {
+                PyErr_SetString(
+                    PyExc_ValueError,
+                    "Dict doesn't have the same number of keys as values");
+                return 0;
+            }
+            expr_ty key, value;
+            for (i = 0; i < length; i++) {
+                key = asdl_seq_GET(keys, i);
+                value = asdl_seq_GET(values, i);
+                if (!key) {
+                    // The position of **rest is handled on the compiler
+                    if (value->kind == Name_kind) {
+                        if (!validate_expr(value, Store)) {
+                            return 0;
+                        }
+                    }
+                    else {
+                        PyErr_SetString(PyExc_ValueError,
+                                        "the double star pattern's target can "
+                                        "only be Name");
+                        return 0;
+                    }
+                }
+                else if (key->kind == Constant_kind ||
+                         key->kind == Attribute_kind ||
+                         key->kind == BinOp_kind) {
+                    if (!validate_pattern(key) || !validate_pattern(value)) {
+                        return 0;
+                    }
+                }
+                else {
+                    PyErr_SetString(
+                        PyExc_ValueError,
+                        "unexpected key type for a mapping pattern");
+                    return 0;
+                }
+            }
+            return 1;
+        case List_kind:
+        case Tuple_kind:
+            values = pattern->kind == List_kind ? pattern->v.List.elts
+                                                : pattern->v.Tuple.elts;
+            length = asdl_seq_LEN(values);
+
+            expr_ty element;
+            for (i = 0; i < length; i++) {
+                element = asdl_seq_GET(values, i);
+                if (element->kind == Starred_kind) {
+                    if (element->v.Starred.value->kind == Name_kind) {
+                        if (!validate_expr(element->v.Starred.value, Store)) {
+                            return 0;
+                        }
+                    }
+                    else {
+                        PyErr_SetString(PyExc_ValueError,
+                                        "the single star pattern's target can "
+                                        "only be Name");
+                        return 0;
+                    }
+                }
+                else if (!validate_pattern(element)) {
+                    return 0;
+                }
+            }
+            return 1;
+        case UnaryOp_kind:
+            if (pattern->v.UnaryOp.op != USub) {
+                PyErr_SetString(PyExc_ValueError,
+                                "only USub operator is allowed for UnaryOp "
+                                "nodes inside of a pattern");
+                return 0;
+            }
+            if (pattern->v.UnaryOp.operand->kind == Constant_kind) {
+                literal = pattern->v.UnaryOp.operand->v.Constant.value;
+                if (PyComplex_CheckExact(literal) ||
+                    PyFloat_CheckExact(literal) ||
+                    PyLong_CheckExact(literal)) {
+                    return 1;
+                }
+                else {
+                    PyErr_SetString(PyExc_ValueError,
+                                    "only numbers are allowed as an operand "
+                                    "to UnaryOp nodes inside of a pattern");
+                    return 0;
+                }
+            }
+            PyErr_SetString(PyExc_ValueError,
+                            "only Constant nodes are allowed as an operand to "
+                            "the UnaryOp node");
+            return 0;
+        case MatchAs_kind:
+            return validate_pattern(pattern->v.MatchAs.pattern) &&
+                   validate_name(pattern->v.MatchAs.name);
+        case Name_kind:
+            if (pattern->v.Name.ctx == Store) {
+                return 1;
+            }
+            PyErr_SetString(PyExc_ValueError,
+                            "Expecting store context for name pattern");
+            return 0;
+        case BinOp_kind:
+            // The actual validation happens after the optimizer
+            // just validate enough to satisfy assertions in the
+            // ast_opt.c
+            op = pattern->v.BinOp.op;
+            left = pattern->v.BinOp.left->kind;
+            right = pattern->v.BinOp.right->kind;
+
+            if ((op != Add && op != Sub) ||
+                (left != Constant_kind && left != UnaryOp_kind) ||
+                right != Constant_kind) {
+                PyErr_SetString(PyExc_ValueError,
+                                "BinOp inside of a literal pattern can only "
+                                "consist of complex numbers");
+                return 0;
+            }
+            return 1;
+        case JoinedStr_kind:
+            // Will be handled in the compiler (after optimizations)
+            return 1;
+        default:
+            PyErr_SetString(PyExc_ValueError, "Invalid Match pattern");
+            return 0;
+    }
     return 1;
 }
+
 
 static int
 _validate_nonempty_seq(asdl_seq *seq, const char *what, const char *owner)
