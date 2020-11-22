@@ -350,6 +350,19 @@ slice_repr(PySliceObject *r)
     return PyUnicode_FromFormat("slice(%R, %R, %R)", r->start, r->stop, r->step);
 }
 
+static Py_hash_t
+slice_hash(PySliceObject *r)
+{
+    PyObject *slice_tuple = PyTuple_Pack(3, r->start, r->stop, r->step);
+    if (slice_tuple == NULL) {
+        return -1;
+    }
+    Py_hash_t hash = PyObject_Hash(slice_tuple);
+    Py_DECREF(slice_tuple);
+    return hash;
+}
+
+
 static PyMemberDef slice_members[] = {
     {"start", T_OBJECT, offsetof(PySliceObject, start), READONLY},
     {"stop", T_OBJECT, offsetof(PySliceObject, stop), READONLY},
@@ -643,7 +656,7 @@ PyTypeObject PySlice_Type = {
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
     0,                                          /* tp_as_mapping */
-    PyObject_HashNotImplemented,                /* tp_hash */
+    (hashfunc)slice_hash,                       /* tp_hash */
     0,                                          /* tp_call */
     0,                                          /* tp_str */
     PyObject_GenericGetAttr,                    /* tp_getattro */

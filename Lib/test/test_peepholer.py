@@ -509,6 +509,20 @@ class TestTranforms(BytecodeTestCase):
             return (y for x in a for y in [f(x)])
         self.assertEqual(count_instr_recursively(genexpr, 'FOR_ITER'), 1)
 
+    def test_slice_folding(self):
+        def f(x):
+            a[1:1:1], a[::1], a[1::], a[1::1],
+            a[::-1], a[-1::], a[:], a[::], a[:1]
+
+        consts = f.__code__.co_consts
+        self.assertIn(slice(1, None, None), consts)
+        self.assertIn(slice(1, 1, 1), consts)
+        self.assertIn(slice(None, None, 1), consts)
+        self.assertIn(slice(1, None, 1), consts)
+        self.assertIn(slice(None, None, -1), consts)
+        self.assertIn(slice(-1, None, None), consts)
+        self.assertIn(slice(None, None, None), consts)
+        self.assertIn(slice(None, 1, None), consts)
 
 class TestBuglets(unittest.TestCase):
 
