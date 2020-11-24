@@ -361,6 +361,7 @@ whatsnew/3.7,,::,error::BytesWarning
 whatsnew/changelog,,::,error::BytesWarning
 whatsnew/changelog,,::,default::BytesWarning
 whatsnew/changelog,,::,default::DeprecationWarning
+whatsnew/3.10,,::,a[::2]
 library/importlib.metadata,,:main,"EntryPoint(name='wheel', value='wheel.cli:main', group='console_scripts')"
 library/importlib.metadata,,`,loading the metadata for packages for the indicated ``context``.
 library/re,,`,"`"
