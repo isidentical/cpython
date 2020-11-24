@@ -393,6 +393,12 @@ Optimizations
   bytecode level.  It is now around 100% faster to create a function with parameter
   annotations.  (Contributed by Yurii Karabas and Inada Naoki in :issue:`42202`)
 
+* The constant slices (e.g ``[1:], [1:], a[::2]``) are now constructed at the
+  compile time and stored in the code objects. Slicing with them are now faster
+  and depending on the type, can increase the speed between %5-%30.
+  (Contributed by Batuhan Taskaya in :issue:`42454`)
+
+
 Deprecated
 ==========
 

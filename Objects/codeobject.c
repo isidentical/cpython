@@ -896,6 +896,15 @@ _PyCode_ConstantKey(PyObject *op)
         key = PyTuple_Pack(2, set, op);
         Py_DECREF(set);
         return key;
+    } else if (PySlice_Check(op)) {
+        PySliceObject *slice = (PySliceObject *)op;
+        PyObject *tuple = PyTuple_Pack(3, slice->start, slice->stop, slice->step);
+        if (tuple == NULL) {
+            return NULL;
+        }
+        key = PyTuple_Pack(2, tuple, op);
+        Py_DECREF(tuple);
+        return key;
     }
     else {
         /* for other types, use the object identifier as a unique identifier
