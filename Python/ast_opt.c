@@ -350,12 +350,6 @@ fold_subscr(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
 
     arg = node->v.Subscript.value;
     idx = node->v.Subscript.slice;
-    if (idx->kind == Slice_kind &&
-        !fold_constant_slice(idx, arena, state))
-    {
-        return 0;
-    }
-
     if (node->v.Subscript.ctx != Load ||
             arg->kind != Constant_kind ||
             idx->kind != Constant_kind)
@@ -598,6 +592,7 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         CALL_OPT(astfold_expr, expr_ty, node_->v.Slice.lower);
         CALL_OPT(astfold_expr, expr_ty, node_->v.Slice.upper);
         CALL_OPT(astfold_expr, expr_ty, node_->v.Slice.step);
+        CALL(fold_constant_slice, expr_ty, node_);
         break;
     case List_kind:
         CALL_SEQ(astfold_expr, expr, node_->v.List.elts);

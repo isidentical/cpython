@@ -524,10 +524,14 @@ class TestTranforms(BytecodeTestCase):
         self.assertIn(slice(-1, None, None), consts)
         self.assertIn(slice(None, None, None), consts)
 
+    def test_slice_folding_deduplication(self):
         def f(a):
-            return a[:][1:] + a[::][-1:] + a[::2]
+            a[:][1:] + a[::][-1:] + a[::2]
+            a[:][1:] + a[::][-1:] + a[::2]
+            a[:][1:] + a[::][-1:] + a[::2]
 
         consts = f.__code__.co_consts
+        self.assertEqual(len(consts), 5)
         self.assertEqual(
             set(consts),
             {
@@ -536,6 +540,25 @@ class TestTranforms(BytecodeTestCase):
                 slice(1, None, None),
                 slice(-1, None, None),
                 slice(None, None, None),
+            }
+        )
+
+    def test_slice_folding_extended(self):
+        def f():
+            a[:], a[:1], a[:,], a[:, 1]
+            a[:], a[:1], a[:,], a[:, 1]
+
+        consts = f.__code__.co_consts
+        self.assertEqual(len(consts), 5)
+        self.assertEqual(
+            set(consts),
+            {
+                None,
+                slice(None, 1, None),
+                slice(None, None, None),
+                (slice(None, None, None),),
+                (slice(None, None, None), 1)
+
             }
         )
 
