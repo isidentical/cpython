@@ -460,6 +460,15 @@ class GrammarTests(unittest.TestCase):
         exec('x: Tuple[int, ...] = a,*b,c', ns)
         self.assertEqual(ns['x'], (1, 2, 3, 4, 5))
 
+    def test_var_annot_target(self):
+        with self.assertRaises(ZeroDivisionError):
+            exec('(1/0).b: int')
+
+        def foo():
+            (yield 1).x: UndefinedType
+
+        self.assertEqual(next(foo()), 1)
+
     def test_funcdef(self):
         ### [decorators] 'def' NAME parameters ['->' test] ':' suite
         ### decorator: '@' namedexpr_test NEWLINE
