@@ -157,6 +157,10 @@ Other Language Changes
 * Assignment expressions can now be used unparenthesized within set literals
   and set comprehensions, as well as in sequence indexes (but not slices).
 
+* Complex annotation targets (everything beside ``simple name`` targets defined
+  by PEP 523) now doesn't produce any runtime effects.
+  (Contributed by Batuhan Taskaya in :issue:`42737`)
+
 
 New Modules
 ===========

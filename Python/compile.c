@@ -1588,7 +1588,7 @@ find_ann(asdl_stmt_seq *stmts)
         st = (stmt_ty)asdl_seq_GET(stmts, i);
         switch (st->kind) {
         case AnnAssign_kind:
-            return 1;
+            return st->v.AnnAssign.simple;
         case For_kind:
             res = find_ann(st->v.For.body) ||
                   find_ann(st->v.For.orelse);
@@ -5166,57 +5166,6 @@ compiler_augassign(struct compiler *c, stmt_ty s)
 }
 
 static int
-check_ann_expr(struct compiler *c, expr_ty e)
-{
-    VISIT(c, expr, e);
-    ADDOP(c, POP_TOP);
-    return 1;
-}
-
-static int
-check_annotation(struct compiler *c, stmt_ty s)
-{
-    /* Annotations are only evaluated in a module or class. */
-    if (c->u->u_scope_type == COMPILER_SCOPE_MODULE ||
-        c->u->u_scope_type == COMPILER_SCOPE_CLASS) {
-        return check_ann_expr(c, s->v.AnnAssign.annotation);
-    }
-    return 1;
-}
-
-static int
-check_ann_subscr(struct compiler *c, expr_ty e)
-{
-    /* We check that everything in a subscript is defined at runtime. */
-    switch (e->kind) {
-    case Slice_kind:
-        if (e->v.Slice.lower && !check_ann_expr(c, e->v.Slice.lower)) {
-            return 0;
-        }
-        if (e->v.Slice.upper && !check_ann_expr(c, e->v.Slice.upper)) {
-            return 0;
-        }
-        if (e->v.Slice.step && !check_ann_expr(c, e->v.Slice.step)) {
-            return 0;
-        }
-        return 1;
-    case Tuple_kind: {
-        /* extended slice */
-        asdl_expr_seq *elts = e->v.Tuple.elts;
-        Py_ssize_t i, n = asdl_seq_LEN(elts);
-        for (i = 0; i < n; i++) {
-            if (!check_ann_subscr(c, asdl_seq_GET(elts, i))) {
-                return 0;
-            }
-        }
-        return 1;
-    }
-    default:
-        return check_ann_expr(c, e);
-    }
-}
-
-static int
 compiler_annassign(struct compiler *c, stmt_ty s)
 {
     expr_ty targ = s->v.AnnAssign.target;
@@ -5247,27 +5196,14 @@ compiler_annassign(struct compiler *c, stmt_ty s)
     case Attribute_kind:
         if (forbidden_name(c, targ->v.Attribute.attr, Store))
             return 0;
-        if (!s->v.AnnAssign.value &&
-            !check_ann_expr(c, targ->v.Attribute.value)) {
-            return 0;
-        }
         break;
     case Subscript_kind:
-        if (!s->v.AnnAssign.value &&
-            (!check_ann_expr(c, targ->v.Subscript.value) ||
-             !check_ann_subscr(c, targ->v.Subscript.slice))) {
-                return 0;
-        }
         break;
     default:
         PyErr_Format(PyExc_SystemError,
                      "invalid node type (%d) for annotated assignment",
                      targ->kind);
             return 0;
-    }
-    /* Annotation is evaluated last. */
-    if (!s->v.AnnAssign.simple && !check_annotation(c, s)) {
-        return 0;
     }
     return 1;
 }

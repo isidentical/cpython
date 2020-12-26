@@ -59,6 +59,10 @@ SyntaxError: cannot assign to __debug__
 Traceback (most recent call last):
 SyntaxError: cannot assign to __debug__
 
+>>> a.__debug__: int = 1
+Traceback (most recent call last):
+SyntaxError: cannot assign to __debug__
+
 >>> f() = 1
 Traceback (most recent call last):
 SyntaxError: cannot assign to function call

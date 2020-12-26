@@ -1,0 +1,2 @@
+Complex annotation targets (everything beside simple names) now doesn't
+cause any runtime effects.

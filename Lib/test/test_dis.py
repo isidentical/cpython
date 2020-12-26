@@ -253,10 +253,8 @@ dis_annot_stmt_str = """\
              28 LOAD_CONST               5 (0)
              30 CALL_FUNCTION            1
              32 STORE_SUBSCR
-             34 LOAD_NAME                4 (int)
-             36 POP_TOP
-             38 LOAD_CONST               6 (None)
-             40 RETURN_VALUE
+             34 LOAD_CONST               6 (None)
+             36 RETURN_VALUE
 """
 
 compound_stmt_str = """\
