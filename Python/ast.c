@@ -395,7 +395,7 @@ validate_pattern(expr_ty pattern)
             keyword_ty keyword;
             for (i = 0; i < length; i++) {
                 keyword = asdl_seq_GET(keywords, i);
-                if (keyword->arg == Py_None) {
+                if (!keyword->arg) {
                     PyErr_SetString(PyExc_ValueError,
                                     "can't use double star pattern inside of "
                                     "a Call pattern");
@@ -437,21 +437,20 @@ validate_pattern(expr_ty pattern)
                 value = asdl_seq_GET(values, i);
                 if (!key) {
                     // The position of **rest is handled on the compiler
-                    if (value->kind == Name_kind) {
-                        if (!validate_expr(value, Store)) {
-                            return 0;
-                        }
-                    }
-                    else {
+                    if (value->kind != Name_kind) {
                         PyErr_SetString(PyExc_ValueError,
                                         "the double star pattern's target can "
                                         "only be Name");
                         return 0;
                     }
+                    if (!validate_expr(value, Store)) {
+                        return 0;
+                    }
                 }
                 else if (key->kind == Constant_kind ||
                          key->kind == Attribute_kind ||
-                         key->kind == BinOp_kind) {
+                         key->kind == BinOp_kind ||
+                         key->kind == UnaryOp_kind) {
                     if (!validate_pattern(key) || !validate_pattern(value)) {
                         return 0;
                     }
@@ -474,15 +473,13 @@ validate_pattern(expr_ty pattern)
             for (i = 0; i < length; i++) {
                 element = asdl_seq_GET(values, i);
                 if (element->kind == Starred_kind) {
-                    if (element->v.Starred.value->kind == Name_kind) {
-                        if (!validate_expr(element->v.Starred.value, Store)) {
-                            return 0;
-                        }
-                    }
-                    else {
+                    if (element->v.Starred.value->kind != Name_kind) {
                         PyErr_SetString(PyExc_ValueError,
                                         "the single star pattern's target can "
                                         "only be Name");
+                        return 0;
+                    }
+                    if (!validate_expr(element->v.Starred.value, Store)) {
                         return 0;
                     }
                 }
@@ -505,12 +502,10 @@ validate_pattern(expr_ty pattern)
                     PyLong_CheckExact(literal)) {
                     return 1;
                 }
-                else {
-                    PyErr_SetString(PyExc_ValueError,
-                                    "only numbers are allowed as an operand "
-                                    "to UnaryOp nodes inside of a pattern");
-                    return 0;
-                }
+                PyErr_SetString(PyExc_ValueError,
+                                "only numbers are allowed as an operand "
+                                "to UnaryOp nodes inside of a pattern");
+                return 0;
             }
             PyErr_SetString(PyExc_ValueError,
                             "only Constant nodes are allowed as an operand to "
@@ -520,12 +515,7 @@ validate_pattern(expr_ty pattern)
             return validate_pattern(pattern->v.MatchAs.pattern) &&
                    validate_name(pattern->v.MatchAs.name);
         case Name_kind:
-            if (pattern->v.Name.ctx == Store) {
-                return 1;
-            }
-            PyErr_SetString(PyExc_ValueError,
-                            "Expecting store context for name pattern");
-            return 0;
+            return validate_expr(pattern, Store));
         case BinOp_kind:
             // The actual validation happens after the optimizer
             // just validate enough to satisfy assertions in the
