@@ -1081,7 +1081,7 @@ tok_backup(struct tok_state *tok, int c)
         if (--tok->cur < tok->buf) {
             Py_FatalError("tokenizer beginning of buffer");
         }
-        if ((int)(unsigned char)*tok->cur != c) {
+        if ((int)(unsigned char)*tok->cur != Py_CHARMASK(c)) {
             Py_FatalError("tok_backup: wrong character");
         }
     }
