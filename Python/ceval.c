@@ -3594,6 +3594,25 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, PyFrameObject *f, int throwflag)
                 goto error;
             DISPATCH();
         }
+        
+        case TARGET(LOAD_ATTR_MULTI): {
+            /* Load an attribute chain.
+             * 
+             * base = TOP()
+             * for _ in range(OPARG):
+             *     node = getattr(base, POP())
+             * return node
+             * */
+             PyObject *base = POP();
+             while (--oparg >= 0) {
+                base = PyObject_GetAttr(base, POP());                
+                if (!base) {
+                    goto error;
+                }
+             }
+             PUSH(base);
+             DISPATCH();
+        }
 
         case TARGET(COMPARE_OP): {
             assert(oparg <= Py_GE);

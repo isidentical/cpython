@@ -1114,6 +1114,8 @@ stack_effect(int opcode, int oparg, int jump)
             return -oparg;
         case LOAD_ATTR:
             return 0;
+        case LOAD_ATTR_MULTI:
+            return -oparg;
         case COMPARE_OP:
         case IS_OP:
         case CONTAINS_OP:
@@ -5270,6 +5272,38 @@ compiler_with(struct compiler *c, stmt_ty s, int pos)
 }
 
 static int
+maybe_chained_load_attr(struct compiler *c, expr_ty e)
+{
+    assert(e->kind == Attribute_kind);
+    
+    if (e->v.Attribute.ctx != Load) {
+        return 1;
+    }
+
+    int counter = 0;
+    expr_ty base = e;
+    while (base->kind == Attribute_kind) {
+        ++counter;
+        base = base->v.Attribute.value;
+    }
+    
+    if (counter <= 1) {
+        return 1;
+    }
+
+    base = e;
+    while (base->kind == Attribute_kind) {
+        ADDOP_LOAD_CONST(c, base->v.Attribute.attr);
+        base = base->v.Attribute.value;
+    }
+
+    VISIT(c, expr, base);
+    ADDOP_I(c, LOAD_ATTR_MULTI, counter);
+    return 2;
+}
+
+
+static int
 compiler_visit_expr1(struct compiler *c, expr_ty e)
 {
     switch (e->kind) {
@@ -5357,7 +5391,14 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
     case FormattedValue_kind:
         return compiler_formatted_value(c, e);
     /* The following exprs can be assignment targets. */
-    case Attribute_kind:
+    case Attribute_kind: {
+        int can_use_chained = maybe_chained_load_attr(c, e);
+        if (!can_use_chained) {
+            return 0; 
+        } else if (can_use_chained == 2) {
+            break;
+        }
+
         VISIT(c, expr, e->v.Attribute.value);
         switch (e->v.Attribute.ctx) {
         case Load:
@@ -5382,6 +5423,7 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
             break;
         }
         break;
+    }
     case Subscript_kind:
         return compiler_subscript(c, e);
     case Starred_kind:
