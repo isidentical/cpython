@@ -4421,6 +4421,7 @@ compiler_formatted_value(struct compiler *c, expr_ty e)
     case 's': oparg = FVC_STR;   break;
     case 'r': oparg = FVC_REPR;  break;
     case 'a': oparg = FVC_ASCII; break;
+    case 'c': oparg = FVC_CHECK; break;
     case -1:  oparg = FVC_NONE;  break;
     default:
         PyErr_Format(PyExc_SystemError,

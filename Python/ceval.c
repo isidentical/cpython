@@ -4378,6 +4378,18 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, PyFrameObject *f, int throwflag)
             case FVC_STR:   conv_fn = PyObject_Str;   break;
             case FVC_REPR:  conv_fn = PyObject_Repr;  break;
             case FVC_ASCII: conv_fn = PyObject_ASCII; break;
+            case FVC_CHECK:
+                conv_fn = NULL;
+                if (!PyUnicode_Check(value)) {
+                    // handle index ;-)
+                    _PyErr_Format(tstate, PyExc_TypeError,
+                                  "join() takes strings, not %.200s",
+                                  Py_TYPE(value)->tp_name);
+                    Py_DECREF(value);
+                    Py_XDECREF(fmt_spec);
+                    goto error;
+                }
+                break;
             default:
                 _PyErr_Format(tstate, PyExc_SystemError,
                               "unexpected conversion flag %d",

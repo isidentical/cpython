@@ -620,6 +620,118 @@ fold_compare(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
     return 1;
 }
 
+// TODO: remove this
+#define CHECK(COND) \
+    if (!(COND)) { \
+        return 1; \
+    }
+
+static expr_ty
+make_const_from_str(PyObject *str, PyArena *arena)
+{
+    return _PyAST_Constant(str, NULL, -1, -1, -1, -1, arena);
+}
+
+static expr_ty
+make_formatted(expr_ty node, char conversion, PyArena *arena)
+{
+    return _PyAST_FormattedValue(node, conversion, NULL,
+                          node->lineno, node->col_offset,
+                          node->end_lineno, node->end_col_offset,
+                          arena);
+}
+
+static int
+fold_str_join(expr_ty node, PyArena *arena)
+{
+    assert(node->kind == Call_kind);
+
+    expr_ty func = node->v.Call.func;
+    CHECK(func->kind == Attribute_kind);
+    CHECK(_PyUnicode_EqualToASCIIString(func->v.Attribute.attr, "join"));
+
+    expr_ty attr = func->v.Attribute.value;
+    CHECK(attr->kind == Constant_kind);
+
+    PyObject *sep = attr->v.Constant.value;
+    CHECK(PyUnicode_CheckExact(sep));
+
+    CHECK(asdl_seq_LEN(node->v.Call.args) == 1);
+    CHECK(asdl_seq_LEN(node->v.Call.keywords) == 0);
+
+    expr_ty arg = asdl_seq_GET(node->v.Call.args, 0);
+
+    asdl_expr_seq *elements = NULL;
+    switch (arg->kind) {
+        case List_kind:
+            elements = arg->v.List.elts;
+            break;
+        case Tuple_kind:
+            elements = arg->v.Tuple.elts;
+            break;
+        default:
+            // TODO: support constant tuples?
+            return 1;
+    }
+
+    assert(elements != NULL);
+
+    Py_ssize_t size = elements->size;
+    asdl_expr_seq *fstring_values = _Py_asdl_expr_seq_new(
+        size * 2 - 1, arena);
+
+    if (!fstring_values) {
+        return 0;
+    }
+
+    // TODO: properly calculate position information
+    // for each node.
+    //
+    // TODO: clear errors that happen on the conversion
+    // before exitting.
+    expr_ty element, sep_node;
+    for (Py_ssize_t i = 0; i < size; i++) {
+        // TODO: if the element is a constant string (common)
+        // then drop the TYPE_CHECK conversion type.
+        element = make_formatted(
+            asdl_seq_GET(elements, i),
+            'c',
+            arena
+        );
+        if (!element) {
+            return 0;
+        }
+        sep_node = make_const_from_str(sep, arena);
+        if (!sep_node) {
+            return 0;
+        }
+        asdl_seq_SET(fstring_values, i * 2, element);
+        if (i < size - 1) {
+            asdl_seq_SET(fstring_values, i * 2 + 1, sep_node);
+        }
+    }
+
+    expr_ty fstr = _PyAST_JoinedStr(fstring_values,
+                                    node->lineno, node->col_offset,
+                                    node->end_lineno, node->end_col_offset,
+                                    arena);
+    if (!fstr) {
+        return 0;
+    }
+
+    COPY_NODE(node, fstr);
+    return 1;
+}
+
+static int
+fold_call(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
+{
+    if (!fold_str_join(node, arena)) {
+        return 0;
+    }
+    return 1;
+}
+
 static int astfold_mod(mod_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_stmt(stmt_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
@@ -777,6 +889,7 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         CALL(astfold_expr, expr_ty, node_->v.Call.func);
         CALL_SEQ(astfold_expr, expr, node_->v.Call.args);
         CALL_SEQ(astfold_keyword, keyword, node_->v.Call.keywords);
+        CALL(fold_call, expr_ty, node_);
         break;
     case FormattedValue_kind:
         CALL(astfold_expr, expr_ty, node_->v.FormattedValue.value);
