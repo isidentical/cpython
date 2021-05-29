@@ -4259,6 +4259,25 @@ check_index(struct compiler *c, expr_ty e, expr_ty s)
     }
 }
 
+static int
+is_imported_module(struct compiler *c, expr_ty e)
+{
+    if (e->kind != Name_kind) {
+        return 0;
+    }
+
+    PyObject *symbol = PyDict_GetItem(
+        c->c_st->st_top->ste_symbols,
+        e->v.Name.id
+    );
+    long flags = PyLong_AS_LONG(symbol);
+    if (flags == -1) {
+        PyErr_Clear();
+        return 0;
+    }
+    return flags & DEF_IMPORT_MOD;
+}
+
 // Return 1 if the method call was optimized, -1 if not, and 0 on error.
 static int
 maybe_optimize_method_call(struct compiler *c, expr_ty e)
@@ -4272,6 +4291,11 @@ maybe_optimize_method_call(struct compiler *c, expr_ty e)
     if (meth->kind != Attribute_kind || meth->v.Attribute.ctx != Load) {
         return -1;
     }
+
+    if (is_imported_module(c, meth->v.Attribute.value)) {
+        return -1;
+    }
+
     /* Check that there aren't too many arguments */
     argsl = asdl_seq_LEN(args);
     kwdsl = asdl_seq_LEN(kwds);

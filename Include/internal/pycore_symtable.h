@@ -94,6 +94,7 @@ extern void _PySymtable_Free(struct symtable *);
 #define DEF_IMPORT 2<<6        /* assignment occurred via import */
 #define DEF_ANNOT 2<<7         /* this name is annotated */
 #define DEF_COMP_ITER 2<<8     /* this name is a comprehension iteration variable */
+#define DEF_IMPORT_MOD 2<<9    /* name belongs to an imported module */
 
 #define DEF_BOUND (DEF_LOCAL | DEF_PARAM | DEF_IMPORT)
 
