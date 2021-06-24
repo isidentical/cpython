@@ -51,7 +51,7 @@ _Py_IDENTIFIER(__name__);
 /* Forward declarations */
 Py_LOCAL_INLINE(PyObject *) call_function(
     PyThreadState *tstate, PyObject ***pp_stack,
-    Py_ssize_t oparg, PyObject *kwnames, int use_tracing);
+    Py_ssize_t oparg, PyObject *kwnames, vectorcallfunc c_call_func);
 static PyObject * do_call_core(
     PyThreadState *tstate, PyObject *func,
     PyObject *callargs, PyObject *kwdict, int use_tracing);
@@ -1445,6 +1445,7 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, PyFrameObject *f, int throwflag)
      */
     CFrame *prev_cframe = tstate->cframe;
     cframe.use_tracing = prev_cframe->use_tracing;
+    cframe.call_func = prev_cframe->call_func;
     cframe.previous = prev_cframe;
     tstate->cframe = &cframe;
 
@@ -4020,7 +4021,7 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, PyFrameObject *f, int throwflag)
                make it accept the `self` as a first argument.
             */
             meth_found = (PEEK(oparg + 2) != NULL);
-            res = call_function(tstate, &sp, oparg + meth_found, NULL, cframe.use_tracing);
+            res = call_function(tstate, &sp, oparg + meth_found, NULL, cframe.call_func);
             stack_pointer = sp;
 
             STACK_SHRINK(1 - meth_found);
@@ -4042,7 +4043,7 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, PyFrameObject *f, int throwflag)
 
             sp = stack_pointer;
             meth_found = (PEEK(oparg + 2) != NULL);
-            res = call_function(tstate, &sp, oparg + meth_found, names, cframe.use_tracing);
+            res = call_function(tstate, &sp, oparg + meth_found, names, cframe.call_func);
             stack_pointer = sp;
 
             STACK_SHRINK(1 - meth_found);
@@ -4058,7 +4059,7 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, PyFrameObject *f, int throwflag)
             PREDICTED(CALL_FUNCTION);
             PyObject **sp, *res;
             sp = stack_pointer;
-            res = call_function(tstate, &sp, oparg, NULL, cframe.use_tracing);
+            res = call_function(tstate, &sp, oparg, NULL, cframe.call_func);
             stack_pointer = sp;
             PUSH(res);
             if (res == NULL) {
@@ -4076,7 +4077,7 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, PyFrameObject *f, int throwflag)
             assert(PyTuple_GET_SIZE(names) <= oparg);
             /* We assume without checking that names contains only strings */
             sp = stack_pointer;
-            res = call_function(tstate, &sp, oparg, names, cframe.use_tracing);
+            res = call_function(tstate, &sp, oparg, names, cframe.call_func);
             stack_pointer = sp;
             PUSH(res);
             Py_DECREF(names);
@@ -4400,6 +4401,7 @@ exit_eval_frame:
     /* Restore previous cframe */
     tstate->cframe = cframe.previous;
     tstate->cframe->use_tracing = cframe.use_tracing;
+    tstate->cframe->call_func = cframe.call_func;
 
     if (PyDTrace_FUNCTION_RETURN_ENABLED())
         dtrace_function_return(f);
@@ -5410,7 +5412,7 @@ call_trace(Py_tracefunc func, PyObject *obj,
     if (tstate->tracing)
         return 0;
     tstate->tracing++;
-    tstate->cframe->use_tracing = 0;
+    _PyEval_SetUseTracing(tstate->cframe, 0);
     if (frame->f_lasti < 0) {
         frame->f_lineno = _PyFrame_GetCode(frame)->co_firstlineno;
     }
@@ -5420,8 +5422,8 @@ call_trace(Py_tracefunc func, PyObject *obj,
     }
     result = func(obj, frame, what, arg);
     frame->f_lineno = 0;
-    tstate->cframe->use_tracing = ((tstate->c_tracefunc != NULL)
-                           || (tstate->c_profilefunc != NULL));
+    _PyEval_SetUseTracing(tstate->cframe, (tstate->c_tracefunc != NULL)
+                                        || (tstate->c_profilefunc != NULL));
     tstate->tracing--;
     return result;
 }
@@ -5432,14 +5434,15 @@ _PyEval_CallTracing(PyObject *func, PyObject *args)
     PyThreadState *tstate = _PyThreadState_GET();
     int save_tracing = tstate->tracing;
     int save_use_tracing = tstate->cframe->use_tracing;
+
     PyObject *result;
 
     tstate->tracing = 0;
-    tstate->cframe->use_tracing = ((tstate->c_tracefunc != NULL)
-                           || (tstate->c_profilefunc != NULL));
+    _PyEval_SetUseTracing(tstate->cframe, (tstate->c_tracefunc != NULL)
+                                        || (tstate->c_profilefunc != NULL));
     result = PyObject_Call(func, args, NULL);
     tstate->tracing = save_tracing;
-    tstate->cframe->use_tracing = save_use_tracing;
+    _PyEval_SetUseTracing(tstate->cframe, save_use_tracing);
     return result;
 }
 
@@ -5491,7 +5494,7 @@ _PyEval_SetProfile(PyThreadState *tstate, Py_tracefunc func, PyObject *arg)
     tstate->c_profilefunc = NULL;
     tstate->c_profileobj = NULL;
     /* Must make sure that tracing is not ignored if 'profileobj' is freed */
-    tstate->cframe->use_tracing = tstate->c_tracefunc != NULL;
+    _PyEval_SetUseTracing(tstate->cframe, tstate->c_tracefunc != NULL);
     Py_XDECREF(profileobj);
 
     Py_XINCREF(arg);
@@ -5499,7 +5502,7 @@ _PyEval_SetProfile(PyThreadState *tstate, Py_tracefunc func, PyObject *arg)
     tstate->c_profilefunc = func;
 
     /* Flag that tracing or profiling is turned on */
-    tstate->cframe->use_tracing = (func != NULL) || (tstate->c_tracefunc != NULL);
+    _PyEval_SetUseTracing(tstate->cframe, (func != NULL) || (tstate->c_tracefunc != NULL));
     return 0;
 }
 
@@ -5532,7 +5535,7 @@ _PyEval_SetTrace(PyThreadState *tstate, Py_tracefunc func, PyObject *arg)
     tstate->c_tracefunc = NULL;
     tstate->c_traceobj = NULL;
     /* Must make sure that profiling is not ignored if 'traceobj' is freed */
-    tstate->cframe->use_tracing = (tstate->c_profilefunc != NULL);
+    _PyEval_SetUseTracing(tstate->cframe, tstate->c_profilefunc != NULL);
     Py_XDECREF(traceobj);
 
     Py_XINCREF(arg);
@@ -5540,9 +5543,8 @@ _PyEval_SetTrace(PyThreadState *tstate, Py_tracefunc func, PyObject *arg)
     tstate->c_tracefunc = func;
 
     /* Flag that tracing or profiling is turned on */
-    tstate->cframe->use_tracing = ((func != NULL)
-                           || (tstate->c_profilefunc != NULL));
-
+    _PyEval_SetUseTracing(tstate->cframe, (func != NULL)
+                                       || (tstate->c_profilefunc != NULL));
     return 0;
 }
 
@@ -5765,13 +5767,13 @@ if (use_tracing && tstate->c_profilefunc) { \
     x = call; \
     }
 
-
 static PyObject *
-trace_call_function(PyThreadState *tstate,
-                    PyObject *func,
+trace_call_function(PyObject *func,
                     PyObject **args, Py_ssize_t nargs,
                     PyObject *kwnames)
 {
+    PyThreadState *tstate = PyThreadState_Get();
+
     int use_tracing = 1;
     PyObject *x;
     if (PyCFunction_CheckExact(func) || PyCMethod_CheckExact(func)) {
@@ -5800,6 +5802,23 @@ trace_call_function(PyThreadState *tstate,
     return PyObject_Vectorcall(func, args, nargs | PY_VECTORCALL_ARGUMENTS_OFFSET, kwnames);
 }
 
+Py_LOCAL_INLINE(PyObject *)
+make_vector_call(PyObject *func, PyObject **stack, Py_ssize_t nargs, PyObject *kwnames)
+{
+    return PyObject_Vectorcall(func, stack, nargs | PY_VECTORCALL_ARGUMENTS_OFFSET, kwnames);
+}
+
+void
+_PyEval_SetUseTracing(CFrame *cframe, int tracing)
+{
+    cframe->use_tracing = tracing;
+    if (tracing) {
+        cframe->call_func = (vectorcallfunc)make_vector_call;
+    } else {
+        cframe->call_func = (vectorcallfunc)trace_call_function;
+    }
+}
+
 /* Issue #29227: Inline call_function() into _PyEval_EvalFrameDefault()
    to reduce the stack consumption. */
 Py_LOCAL_INLINE(PyObject *) _Py_HOT_FUNCTION
@@ -5807,7 +5826,7 @@ call_function(PyThreadState *tstate,
               PyObject ***pp_stack,
               Py_ssize_t oparg,
               PyObject *kwnames,
-              int use_tracing)
+              vectorcallfunc c_call_func)
 {
     PyObject **pfunc = (*pp_stack) - oparg - 1;
     PyObject *func = *pfunc;
@@ -5816,13 +5835,7 @@ call_function(PyThreadState *tstate,
     Py_ssize_t nargs = oparg - nkwargs;
     PyObject **stack = (*pp_stack) - nargs - nkwargs;
 
-    if (use_tracing) {
-        x = trace_call_function(tstate, func, stack, nargs, kwnames);
-    }
-    else {
-        x = PyObject_Vectorcall(func, stack, nargs | PY_VECTORCALL_ARGUMENTS_OFFSET, kwnames);
-    }
-
+    x = c_call_func(func, stack, nargs, kwnames);
     assert((x != NULL) ^ (_PyErr_Occurred(tstate) != NULL));
 
     /* Clear the stack of the function object. */

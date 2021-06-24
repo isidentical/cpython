@@ -46,6 +46,7 @@ typedef struct _cframe {
      * accessed outside of their lifetime.
      */
     int use_tracing;
+    vectorcallfunc call_func;
     struct _cframe *previous;
 } CFrame;
 
