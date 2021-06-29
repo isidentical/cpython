@@ -223,6 +223,8 @@ class CodeTest(unittest.TestCase):
                         co.co_name,
                         co.co_firstlineno,
                         co.co_lnotab,
+                        co.co_endlinetable,
+                        co.co_columntable,
                         co.co_exceptiontable,
                         co.co_freevars,
                         co.co_cellvars)
@@ -257,6 +259,8 @@ class CodeTest(unittest.TestCase):
             ("co_filename", "newfilename"),
             ("co_name", "newname"),
             ("co_linetable", code2.co_linetable),
+            ("co_endlinetable", code2.co_endlinetable),
+            ("co_columntable", code2.co_columntable),
         ):
             with self.subTest(attr=attr, value=value):
                 new_code = code.replace(**{attr: value})
@@ -293,6 +297,8 @@ class CodeTest(unittest.TestCase):
                          co.co_name,
                          co.co_firstlineno,
                          co.co_lnotab,
+                         co.co_endlinetable,
+                         co.co_columntable,
                          co.co_exceptiontable,
                          co.co_freevars,
                          co.co_cellvars,
@@ -308,6 +314,34 @@ class CodeTest(unittest.TestCase):
             pass
         new_code = code = func.__code__.replace(co_linetable=b'')
         self.assertEqual(list(new_code.co_lines()), [])
+
+    # co_positions behavior when info is missing.
+
+    def test_co_positions_empty_linetable(self):
+        def func():
+            x = 1
+        new_code = func.__code__.replace(co_linetable=b'')
+        for line, end_line, column, end_column in new_code.co_positions():
+            self.assertIsNone(line)
+            self.assertEqual(end_line, new_code.co_firstlineno + 1)
+
+    def test_co_positions_empty_endlinetable(self):
+        def func():
+            x = 1
+        new_code = func.__code__.replace(co_endlinetable=b'')
+        for line, end_line, column, end_column in new_code.co_positions():
+            self.assertEqual(line, new_code.co_firstlineno + 1)
+            self.assertIsNone(end_line)
+
+    def test_co_positions_empty_columntable(self):
+        def func():
+            x = 1
+        new_code = func.__code__.replace(co_columntable=b'')
+        for line, end_line, column, end_column in new_code.co_positions():
+            self.assertEqual(line, new_code.co_firstlineno + 1)
+            self.assertEqual(end_line, new_code.co_firstlineno + 1)
+            self.assertIsNone(column)
+            self.assertIsNone(end_column)
 
 
 def isinterned(s):
