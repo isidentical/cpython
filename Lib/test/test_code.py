@@ -129,7 +129,9 @@ import inspect
 import sys
 import threading
 import unittest
+import textwrap
 import weakref
+
 try:
     import ctypes
 except ImportError:
@@ -314,6 +316,53 @@ class CodeTest(unittest.TestCase):
             pass
         new_code = code = func.__code__.replace(co_linetable=b'')
         self.assertEqual(list(new_code.co_lines()), [])
+
+    def test_co_positions_artificial_instructions(self):
+        import dis
+
+        namespace = {}
+        exec(textwrap.dedent("""\
+        try:
+            1/0
+        except Exception as e:
+            exc = e
+        """), namespace)
+
+        exc = namespace['exc']
+        traceback = exc.__traceback__
+        code = traceback.tb_frame.f_code
+
+        artificial_instructions = []
+        for instr, positions in zip(
+            dis.get_instructions(code),
+            code.co_positions(),
+            strict=True
+        ):
+            # If any of the positions is None, then all have to
+            # be None as well for the case above. There are still
+            # some places in the compiler, where the artificial instructions
+            # get assigned the first_lineno but they don't have other positions.
+            # There is no easy way of inferring them at that stage, so for now
+            # we don't support it.
+            self.assertTrue(all(positions) or not any(positions))
+
+            if not any(positions):
+                artificial_instructions.append(instr)
+
+        self.assertEqual(
+            [
+                (instruction.opname, instruction.argval)
+                for instruction in artificial_instructions
+            ],
+            [
+                ("PUSH_EXC_INFO", None),
+                ("LOAD_CONST", None), # artificial 'None'
+                ("STORE_NAME", "e"),  # XX: we know the location for this
+                ("DELETE_NAME", "e"),
+                ("RERAISE", 1),
+                ("POP_EXCEPT_AND_RERAISE", None)
+            ]
+        )
 
     # co_positions behavior when info is missing.
 
