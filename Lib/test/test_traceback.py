@@ -1432,7 +1432,7 @@ class TestTracebackException(unittest.TestCase):
         self.assertEqual(
             output.getvalue().split('\n')[-5:],
             ['    x/0',
-             '    ^^^',
+             '    ^~^',
              '    x = 12',
              'ZeroDivisionError: division by zero',
              ''])

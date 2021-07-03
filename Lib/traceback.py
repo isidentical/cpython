@@ -489,10 +489,21 @@ class StackSummary(list):
                 if frame.end_lineno == frame.lineno and frame.end_colno != 0:
                     colno = _byte_offset_to_character_offset(frame._original_line, frame.colno)
                     end_colno = _byte_offset_to_character_offset(frame._original_line, frame.end_colno)
+                    
+                    start_offset = colno - stripped_characters
+                    left_end_offset, right_start_offset = _extract_anchors_from_segment(frame.line)
 
                     row.append('    ')
-                    row.append(' ' * (colno - stripped_characters))
-                    row.append('^' * (end_colno - colno))
+                    for offset in range(end_colno - colno):
+                        if offset < start_offset:
+                            row.append(' ')
+                        elif offset <= left_end_offset:
+                            row.append('^')
+                        elif offset <= right_start_offset:
+                            row.append('~')
+                        else:
+                            row.append('^')
+
                     row.append('\n')
 
             if frame.locals:
@@ -515,7 +526,23 @@ def _byte_offset_to_character_offset(str, offset):
 
     return len(as_utf8[:offset].decode("utf-8"))
 
+def _extract_anchors_from_segment(segment):
+    import ast
 
+    tree = ast.parse(segment)
+    if len(tree.body) == 1:
+        statement = tree.body[0]
+        match statement:
+            case ast.Expr(expr):
+                match expr:
+                    case ast.BinOp():
+                        operator_str = segment[expr.left.end_col_offset:expr.right.col_offset]
+                        operator_offset = len(operator_str) - len(operator_str.lstrip())
+                        return operator_offset, operator_offset + 1
+                    case ast.Subscript():
+                        return expr.value.end_col_offset, expr.slice.col_offset
+    return -1, -1
+    
 class TracebackException:
     """An exception ready for rendering.
 

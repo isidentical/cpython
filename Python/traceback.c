@@ -5,6 +5,9 @@
 
 #include "code.h"
 #include "pycore_interp.h"        // PyInterpreterState.gc
+#include "pycore_pyarena.h"       // _PyArena_Free()
+#include "pycore_ast.h"           // asdl_seq_*
+#include "pycore_parser.h"        // _PyParser_ASTFromString
 #include "frameobject.h"          // PyFrame_GetBack()
 #include "structmember.h"         // PyMemberDef
 #include "osdefs.h"               // SEP
@@ -533,6 +536,107 @@ static int byte_to_character_offset_in_line(PyObject* line, int offset) {
     return size;
 }
 
+// Traceback annotation specializer
+static int
+extract_anchors_from_expr(PyObject *line, expr_ty expr, int *left_anchor, int *right_anchor)
+{
+    switch (expr->kind) {
+        case BinOp_kind: {
+            PyObject *operator = PyUnicode_Substring(line, expr->v.BinOp.left->end_col_offset,
+                                                     expr->v.BinOp.right->col_offset);
+            if (!operator) {
+                return -1;
+            }
+
+            const char *operator_str = PyUnicode_AsUTF8(operator);
+            if (!operator_str) {
+                Py_DECREF(operator);
+                return -1;
+            }
+
+            Py_ssize_t i, len = PyUnicode_GET_LENGTH(operator);
+            for (i = 0; i <= len; i++) {
+                if (operator_str[i] == ' '  ||
+                    operator_str[i] == '\t' ||
+                    operator_str[i] == '\f')
+                {
+                    continue;
+                }
+                *left_anchor = expr->v.BinOp.left->end_col_offset + i;
+                *right_anchor = expr->v.BinOp.left->end_col_offset + i + 1;
+                break;
+            }
+            Py_DECREF(operator);
+            return 0;
+        }
+        case Subscript_kind: {
+            *left_anchor = expr->v.Subscript.value->end_col_offset;
+            *right_anchor = expr->v.Subscript.slice->end_col_offset + 1;
+            return 0;
+        }
+        default:
+            return 0;
+    }
+}
+
+static int
+extract_anchors_from_stmt(PyObject *line, stmt_ty statement, int *left_anchor, int *right_anchor)
+{
+    switch (statement->kind) {
+        case Expr_kind: {
+            return extract_anchors_from_expr(line, statement->v.Expr.value, left_anchor, right_anchor);
+        }
+        default:
+            return 0;
+    }
+}
+
+static int
+extract_anchors_from_line(PyObject *filename, PyObject *line,
+                          int start_offset, int end_offset,
+                          int *left_anchor, int *right_anchor)
+{
+    int res = -1;
+    PyArena *arena = NULL;
+    PyObject *segment = PyUnicode_Substring(line, start_offset - 1, end_offset - 1);
+    if (!segment) {
+        goto done;
+    }
+
+    const char *segment_str = PyUnicode_AsUTF8(segment);
+    if (!segment) {
+        goto done;
+    }
+
+    arena = _PyArena_New();
+    if (!arena) {
+        goto done;
+    }
+
+    PyCompilerFlags flags = _PyCompilerFlags_INIT;
+    // We need to optimize the AST
+    mod_ty module = _PyParser_ASTFromString(segment_str, filename, Py_file_input,
+                                            &flags, arena);
+    if (!module) {
+        goto done;
+    }
+
+    assert(module->kind == Module_kind);
+    if (asdl_seq_LEN(module->body) == 1) {
+        stmt_ty statement = asdl_seq_GET(module->v.Module.body, 0);
+        res = extract_anchors_from_stmt(line, statement, left_anchor, right_anchor);
+    } else {
+        res = 0;
+    }
+done:
+    /* Instead of raising something, we should probably just use the normal
+     * end_offset, and clear the error (unless it is KeyboardInterrupt, then
+     * raise it) */
+    Py_XDECREF(segment);
+    _PyArena_Free(arena);
+    return res;
+}
+
 #define _TRACEBACK_SOURCE_LINE_INDENT 4
 
 // TODO: Pick up filename and other stuff from the tb argument
@@ -567,27 +671,39 @@ tb_displayline(PyTracebackObject* tb, PyObject *f, PyObject *filename, int linen
         int start_offset = PyCode_Addr2Offset(code, code_offset);
         int end_offset = PyCode_Addr2EndOffset(code, code_offset);
 
-        start_offset = byte_to_character_offset_in_line(source_line, start_offset);
+        //start_offset = byte_to_character_offset_in_line(source_line, start_offset);
         // Not sure why a `+ 1` is needed here for the end_offset.
-        end_offset = byte_to_character_offset_in_line(source_line, end_offset) + 1;
-
+        //end_offset = byte_to_character_offset_in_line(source_line, end_offset) + 1;
         if (start_offset <= 0 || end_offset < 0) {
             goto done;
         }
         if (end_offset == 0) {
-            // TODO: highlight from start_offset to the end of line
             goto done;
         }
 
-        char offset = truncation;
-        while (++offset <= start_offset - 1) {
-            err = PyFile_WriteString(" ", f);
-            if (err < 0) {
-                goto done;
-            }
+        // Tracebacks use 1-indexed locations, so adjust the AST locations
+        int left_end_offset = -1, right_start_offset = -1;
+        err = extract_anchors_from_line(filename, source_line, start_offset, end_offset,
+                                        &left_end_offset, &right_start_offset);
+        if (err < 0) {
+            PyErr_Clear();
+            left_end_offset = right_start_offset = -1;
         }
+
+        left_end_offset = left_end_offset == -1 ? end_offset : left_end_offset + 1;
+        right_start_offset = right_start_offset == -1 ? end_offset : right_start_offset + 1;
+
+        char offset = truncation + 1;
         while (++offset <= end_offset) {
-            err = PyFile_WriteString("^", f);
+            if (offset <= start_offset) {
+                err = PyFile_WriteString(" ", f);
+            } else if (offset <= left_end_offset) {
+                err = PyFile_WriteString("^", f);
+            } else if (offset <= right_start_offset) {
+                err = PyFile_WriteString("~", f);
+            } else {
+                err = PyFile_WriteString("^", f);
+            }
             if (err < 0) {
                 goto done;
             }
