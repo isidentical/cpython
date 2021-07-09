@@ -372,6 +372,62 @@ finally:
 }
 
 int
+_Py_DisplayLine(PyObject *f, PyObject *line_obj, PyObject **line,
+                int indent, int *truncation)
+{
+    if (line) {
+        Py_INCREF(line_obj);
+        *line = line_obj;
+    }
+
+    int i, kind, err = -1;
+    const void *data;
+    char buf[MAXPATHLEN+1];
+
+    /* remove the indentation of the line */
+    kind = PyUnicode_KIND(line_obj);
+    data = PyUnicode_DATA(line_obj);
+    for (i=0; i < PyUnicode_GET_LENGTH(line_obj); i++) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, i);
+        if (ch != ' ' && ch != '\t' && ch != '\014')
+            break;
+    }
+    if (i) {
+        PyObject *truncated;
+        truncated = PyUnicode_Substring(line_obj, i, PyUnicode_GET_LENGTH(line_obj));
+        if (truncated) {
+            Py_DECREF(line_obj);
+            line_obj = truncated;
+        } else {
+            PyErr_Clear();
+        }
+    }
+
+    if (truncation != NULL) {
+        *truncation = i - indent;
+    }
+
+    /* Write some spaces before the line */
+    strcpy(buf, "          ");
+    assert (strlen(buf) == 10);
+    while (indent > 0) {
+        if (indent < 10)
+            buf[indent] = '\0';
+        err = PyFile_WriteString(buf, f);
+        if (err != 0)
+            break;
+        indent -= 10;
+    }
+
+    /* finally display the line */
+    if (err == 0)
+        err = PyFile_WriteObject(line_obj, f, Py_PRINT_RAW);
+    Py_DECREF(line_obj);
+    if  (err == 0)
+        err = PyFile_WriteString("\n", f);
+    return err;
+}
+int
 _Py_DisplaySourceLine(PyObject *f, PyObject *filename, int lineno, int indent, int *truncation, PyObject **line)
 {
     int err = 0;
@@ -385,8 +441,6 @@ _Py_DisplaySourceLine(PyObject *f, PyObject *filename, int lineno, int indent, i
     PyObject *lineobj = NULL;
     PyObject *res;
     char buf[MAXPATHLEN+1];
-    int kind;
-    const void *data;
 
     /* open the file */
     if (filename == NULL)
@@ -463,53 +517,32 @@ _Py_DisplaySourceLine(PyObject *f, PyObject *filename, int lineno, int indent, i
         return err;
     }
 
-    if (line) {
-        Py_INCREF(lineobj);
-        *line = lineobj;
+    return _Py_DisplayLine(f, lineobj, line, indent, truncation);
+}
+
+int
+_Py_DisplayInteractiveSourceLine(PyObject *f, PyFrameObject *frame, int lineno, int indent,
+                                 int *truncation, PyObject **line)
+{
+    PyObject *globals = _PyFrame_GetGlobals(frame);
+    PyObject *source = PyDict_GetItemString(globals, "__source__");
+    if (!source) {
+        return -1;
     }
 
-    /* remove the indentation of the line */
-    kind = PyUnicode_KIND(lineobj);
-    data = PyUnicode_DATA(lineobj);
-    for (i=0; i < PyUnicode_GET_LENGTH(lineobj); i++) {
-        Py_UCS4 ch = PyUnicode_READ(kind, data, i);
-        if (ch != ' ' && ch != '\t' && ch != '\014')
-            break;
-    }
-    if (i) {
-        PyObject *truncated;
-        truncated = PyUnicode_Substring(lineobj, i, PyUnicode_GET_LENGTH(lineobj));
-        if (truncated) {
-            Py_DECREF(lineobj);
-            lineobj = truncated;
-        } else {
-            PyErr_Clear();
-        }
+    PyObject *lines = PyUnicode_Splitlines(source, 0);
+    if (PyList_GET_SIZE(lines) < lineno) {
+        return -1;
     }
 
-    if (truncation != NULL) {
-        *truncation = i - indent;
+    PyObject *lineobj = PyList_GetItem(lines, lineno - 1);
+    if (!lineobj) {
+        return -1;
     }
+    Py_INCREF(lineobj);
+    Py_DECREF(lines);
 
-    /* Write some spaces before the line */
-    strcpy(buf, "          ");
-    assert (strlen(buf) == 10);
-    while (indent > 0) {
-        if (indent < 10)
-            buf[indent] = '\0';
-        err = PyFile_WriteString(buf, f);
-        if (err != 0)
-            break;
-        indent -= 10;
-    }
-
-    /* finally display the line */
-    if (err == 0)
-        err = PyFile_WriteObject(lineobj, f, Py_PRINT_RAW);
-    Py_DECREF(lineobj);
-    if  (err == 0)
-        err = PyFile_WriteString("\n", f);
-    return err;
+    return _Py_DisplayLine(f, lineobj, line, indent, truncation);
 }
 
 #define _TRACEBACK_SOURCE_LINE_INDENT 4
@@ -533,51 +566,56 @@ tb_displayline(PyTracebackObject* tb, PyObject *f, PyObject *filename, int linen
         return err;
     int truncation = _TRACEBACK_SOURCE_LINE_INDENT;
     PyObject* source_line = NULL;
-    /* ignore errors since we can't report them, can we? */
-    if (!_Py_DisplaySourceLine(f, filename, lineno, _TRACEBACK_SOURCE_LINE_INDENT,
-                               &truncation, &source_line)) {
-        int code_offset = tb->tb_lasti;
-        PyCodeObject* code = _PyFrame_GetCode(frame);
 
-        int start_line;
-        int end_line;
-        int start_col_byte_offset;
-        int end_col_byte_offset;
-        if (!PyCode_Addr2Location(code, code_offset, &start_line, &start_col_byte_offset,
-                                 &end_line, &end_col_byte_offset)) {
-            goto done;
-        }
-        if (start_line != end_line) {
-            goto done;
-        }
-
-        if (start_col_byte_offset < 0 || end_col_byte_offset < 0) {
-            goto done;
-        }
-        // Convert the utf-8 byte offset to the actual character offset so we
-        // print the right number of carets.
-        Py_ssize_t start_offset = _PyPegen_byte_offset_to_character_offset(source_line, start_col_byte_offset);
-        Py_ssize_t end_offset = _PyPegen_byte_offset_to_character_offset(source_line, end_col_byte_offset);
-
-        char offset = truncation;
-        while (++offset <= start_offset) {
-            err = PyFile_WriteString(" ", f);
-            if (err < 0) {
-                goto done;
-            }
-        }
-        while (++offset <= end_offset + 1) {
-            err = PyFile_WriteString("^", f);
-            if (err < 0) {
-                goto done;
-            }
-        }
-        err = PyFile_WriteString("\n", f);
+    if (PyUnicode_CompareWithASCIIString(filename, "<stdin>") == 0) {
+        err = _Py_DisplayInteractiveSourceLine(f, frame, lineno, _TRACEBACK_SOURCE_LINE_INDENT,
+                                                           &truncation, &source_line);
+    } else {
+        err = _Py_DisplaySourceLine(f, filename, lineno, _TRACEBACK_SOURCE_LINE_INDENT,
+                                                &truncation, &source_line);
     }
-
-    else {
+    if (err < 0) {
         PyErr_Clear();
+        goto done;
     }
+
+    int code_offset = tb->tb_lasti;
+    PyCodeObject* code = _PyFrame_GetCode(frame);
+
+    int start_line;
+    int end_line;
+    int start_col_byte_offset;
+    int end_col_byte_offset;
+    if (!PyCode_Addr2Location(code, code_offset, &start_line, &start_col_byte_offset,
+                             &end_line, &end_col_byte_offset)) {
+        goto done;
+    }
+    if (start_line != end_line) {
+        goto done;
+    }
+
+    if (start_col_byte_offset < 0 || end_col_byte_offset < 0) {
+        goto done;
+    }
+    // Convert the utf-8 byte offset to the actual character offset so we
+    // print the right number of carets.
+    Py_ssize_t start_offset = _PyPegen_byte_offset_to_character_offset(source_line, start_col_byte_offset);
+    Py_ssize_t end_offset = _PyPegen_byte_offset_to_character_offset(source_line, end_col_byte_offset);
+
+    char offset = truncation;
+    while (++offset <= start_offset) {
+        err = PyFile_WriteString(" ", f);
+        if (err < 0) {
+            goto done;
+        }
+    }
+    while (++offset <= end_offset + 1) {
+        err = PyFile_WriteString("^", f);
+        if (err < 0) {
+            goto done;
+        }
+    }
+    err = PyFile_WriteString("\n", f);
     
 done:
     Py_XDECREF(source_line);
