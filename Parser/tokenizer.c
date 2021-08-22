@@ -2202,7 +2202,7 @@ tok_get_fstring_mode(struct tok_state *tok, tokenizer_mode* current_tok, const c
                 return FSTRING_MIDDLE;
             }
             char peek = tok_nextc(tok);
-            if (peek != '}') {
+            if (!(peek == '}' && current_tok->bracket_mark_index <= 0)) {
                 tok_backup(tok, peek);
                 tok_backup(tok, c);
                 tok->tok_mode_stack[tok->tok_mode_stack_index].kind = TOK_REGULAR_MODE;
