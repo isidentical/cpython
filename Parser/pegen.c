@@ -2655,11 +2655,12 @@ deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* expr, Token*b) {
 
 // Hack: remove!
 expr_ty _PyPegen_constant_from_token2(Parser* p, Token* tok) {
-    char* bstr = PyBytes_AsString(tok->bytes);
+    const char* bstr = PyBytes_AsString(tok->bytes);
     if (bstr == NULL) {
         return NULL;
     }
-    PyObject* str = PyUnicode_FromString(bstr);
+    size_t size = PyBytes_GET_SIZE(tok->bytes);
+    PyObject* str = _PyPegen_DecodeUnicodeWithEscapes(p, bstr, size, tok);
     if (str == NULL) {
         return NULL;
     }

@@ -148,6 +148,13 @@ decode_bytes_with_escapes(Parser *p, const char *s, Py_ssize_t len, Token *t)
     return result;
 }
 
+// Hack: remove! (and move to the pegen.c when removing this file)
+PyObject *
+_PyPegen_DecodeUnicodeWithEscapes(Parser *parser, const char *s, size_t len, Token *t)
+{
+    return decode_unicode_with_escapes(parser, s, len, t);
+}
+
 /* s must include the bracketing quote characters, and r, b, u,
    &/or f prefixes (if any), and embedded escape sequences (if any).
    _PyPegen_parsestr parses it, and sets *result to decoded Python string object.
