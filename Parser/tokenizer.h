@@ -43,6 +43,7 @@ typedef struct _tokenizer_mode {
 
     char f_string_quote;
     int f_string_quote_size;
+    int f_string_raw;
     const char* f_string_start; 
     const char* f_string_multi_line_start; 
 } tokenizer_mode;

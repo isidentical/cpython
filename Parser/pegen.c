@@ -2588,19 +2588,20 @@ expr_ty _PyPegen_collect_call_seqs(Parser *p, asdl_expr_seq *a, asdl_seq *b,
 }
 
 static expr_ty
-_PyPegen_fstring_bytes_constant_to_unicode(Parser* p, expr_ty constant) {
-    char* bstr = PyBytes_AsString(constant->v.Constant.value);
+_PyPegen_fstring_bytes_constant_to_unicode(Parser* p, int is_raw, expr_ty constant) {
+    const char* bstr = PyBytes_AsString(constant->v.Constant.value);
     if (bstr == NULL) {
         return NULL;
     }
 
-    PyObject* str = NULL;
+    size_t len;
     if (strcmp(bstr, "{{") == 0 || strcmp(bstr, "}}") == 0) {
-        str = PyUnicode_DecodeUTF8(bstr, 1, "strict");
+        len = 1;
     } else {
-        str = PyUnicode_FromString(bstr);
-
+        len = PyBytes_GET_SIZE(constant->v.Constant.value);
     }
+
+    PyObject *str = _PyPegen_DecodeFstring(p, is_raw, bstr, len, NULL);
     if (str == NULL) {
         return NULL;
     }
@@ -2617,6 +2618,12 @@ expr_ty
 deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* expr, Token*b) {
     Py_ssize_t n_items = asdl_seq_LEN(expr);
 
+    const char* quote_str = PyBytes_AsString(a->bytes);
+    if (quote_str == NULL) {
+        return NULL;
+    }
+
+    int is_raw = strchr(quote_str, 'r') == NULL;
     asdl_expr_seq *seq = _Py_asdl_expr_seq_new(n_items + 1, p->arena);
     if (seq == NULL) {
         return NULL;
@@ -2625,7 +2632,7 @@ deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* expr, Token*b) {
     for (i= 0; i < asdl_seq_LEN(expr); i++) {
         expr_ty item = asdl_seq_GET(expr, i);
         if (item->kind == Constant_kind && PyBytes_CheckExact(item->v.Constant.value)) {
-            item = _PyPegen_fstring_bytes_constant_to_unicode(p, item);
+            item = _PyPegen_fstring_bytes_constant_to_unicode(p, is_raw, item);
             if (item == NULL) {
                 return NULL;
             }
@@ -2655,12 +2662,11 @@ deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* expr, Token*b) {
 
 // Hack: remove!
 expr_ty _PyPegen_constant_from_token2(Parser* p, Token* tok) {
-    const char* bstr = PyBytes_AsString(tok->bytes);
+    char* bstr = PyBytes_AsString(tok->bytes);
     if (bstr == NULL) {
         return NULL;
     }
-    size_t size = PyBytes_GET_SIZE(tok->bytes);
-    PyObject* str = _PyPegen_DecodeUnicodeWithEscapes(p, bstr, size, tok);
+    PyObject* str = PyUnicode_FromString(bstr);
     if (str == NULL) {
         return NULL;
     }

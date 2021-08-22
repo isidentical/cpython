@@ -1948,6 +1948,17 @@ tok_get_normal_mode(struct tok_state *tok, tokenizer_mode* current_tok, const ch
         current_tok->f_string_start = tok->start;
         current_tok->f_string_multi_line_start = tok->line_start;
 
+        switch (*tok->start) {
+            case 'f':
+                current_tok->f_string_raw = *(tok->start + 1) == 'r';
+                break;
+            case 'r':
+                current_tok->f_string_raw = 1;
+                break;
+            default:
+                Py_UNREACHABLE();
+        }
+
         current_tok->bracket_stack = 0;
         current_tok->bracket_mark[0] = 0;
         current_tok->bracket_mark_index = -1;
@@ -2214,7 +2225,7 @@ tok_get_fstring_mode(struct tok_state *tok, tokenizer_mode* current_tok, const c
             }
             return FSTRING_MIDDLE;
         }
-        else {
+        else if (!current_tok->f_string_raw) {
             end_quote_size = 0;
             if (c == '\\') {
                 char peek = tok_nextc(tok);
