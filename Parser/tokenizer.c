@@ -2153,6 +2153,7 @@ tok_get_fstring_mode(struct tok_state *tok, tokenizer_mode* current_tok, const c
     }
 
     int end_quote_size = 0;
+    int unicode_escape = 0;
     while (end_quote_size != current_tok->f_string_quote_size) {
         int c = tok_nextc(tok);
         if (c == EOF || (current_tok->f_string_quote_size == 1 && c == '\n')) {
@@ -2195,6 +2196,11 @@ tok_get_fstring_mode(struct tok_state *tok, tokenizer_mode* current_tok, const c
             }
             return FSTRING_MIDDLE;
         } else if (c == '}') {
+            if (unicode_escape) {
+                *p_start = tok->start;
+                *p_end = tok->cur;
+                return FSTRING_MIDDLE;
+            }
             char peek = tok_nextc(tok);
             if (peek != '}') {
                 tok_backup(tok, peek);
@@ -2211,7 +2217,16 @@ tok_get_fstring_mode(struct tok_state *tok, tokenizer_mode* current_tok, const c
         else {
             end_quote_size = 0;
             if (c == '\\') {
-                tok_nextc(tok);  /* skip escaped char */
+                char peek = tok_nextc(tok);
+                if (peek == 'N') {
+                    /* Handle named unicode escapes (\N{BULLET}) */
+                    peek = tok_nextc(tok);
+                    if (peek == '{') {
+                        unicode_escape = 1;
+                    } else {
+                        tok_backup(tok, peek);
+                    }
+                }
             }
         }
     }

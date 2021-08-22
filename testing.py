@@ -14,7 +14,7 @@ def generate_tokens(readline):
     return _tokenize(readline, None)
 
 
-string = 'g" {1+1}"'
+string = 'f"\\N{bullet}"'
 
 import io
 f = io.StringIO(string)
