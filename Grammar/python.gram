@@ -859,7 +859,7 @@ gstring_middle[expr_ty]:
 # or otherwise it will try to parse the first token with the regular tokenizer mode (due to the EXTRA).
 # TODO: (Ideally we need a way similar to 'memo' so the parser can set the tokenize mode on fstring/normal)
 gstring_replacement_field[expr_ty]:
-    | expr_start='{' a=star_expressions debug_expr="="? conversion=[
+    | expr_start='{' a=(yield_expr | star_expressions) debug_expr="="? conversion=[
         "!" conv=NAME {conv}
     ] format=[
         ':' spec=gstring_format_spec* { spec ? _PyAST_JoinedStr((asdl_expr_seq*)spec, EXTRA) : NULL }
