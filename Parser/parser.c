@@ -14484,7 +14484,7 @@ gstring_middle_rule(Parser *p)
 }
 
 // gstring_replacement_field:
-//     | '{' star_expressions ["!" NAME] [':' gstring_format_spec*] &&'}'
+//     | '{' star_expressions "="? ["!" NAME] [':' gstring_format_spec*] &&'}'
 static expr_ty
 gstring_replacement_field_rule(Parser *p)
 {
@@ -14504,30 +14504,33 @@ gstring_replacement_field_rule(Parser *p)
     UNUSED(_start_lineno); // Only used by EXTRA macro
     int _start_col_offset = p->tokens[_mark]->col_offset;
     UNUSED(_start_col_offset); // Only used by EXTRA macro
-    { // '{' star_expressions ["!" NAME] [':' gstring_format_spec*] &&'}'
+    { // '{' star_expressions "="? ["!" NAME] [':' gstring_format_spec*] &&'}'
         if (p->error_indicator) {
             D(p->level--);
             return NULL;
         }
-        D(fprintf(stderr, "%*c> gstring_replacement_field[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "'{' star_expressions [\"!\" NAME] [':' gstring_format_spec*] &&'}'"));
+        D(fprintf(stderr, "%*c> gstring_replacement_field[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "'{' star_expressions \"=\"? [\"!\" NAME] [':' gstring_format_spec*] &&'}'"));
         Token * _literal;
-        Token * _literal_1;
         expr_ty a;
         void *conversion;
+        void *debug_expr;
+        Token * expr_start;
         void *format;
         if (
-            (_literal = _PyPegen_expect_token(p, 25))  // token='{'
+            (expr_start = _PyPegen_expect_token(p, 25))  // token='{'
             &&
             (a = star_expressions_rule(p))  // star_expressions
+            &&
+            (debug_expr = _PyPegen_expect_token(p, 22), 1)  // "="?
             &&
             (conversion = _tmp_107_rule(p), 1)  // ["!" NAME]
             &&
             (format = _tmp_108_rule(p), 1)  // [':' gstring_format_spec*]
             &&
-            (_literal_1 = _PyPegen_expect_forced_token(p, 26, "}"))  // forced_token='}'
+            (_literal = _PyPegen_expect_forced_token(p, 26, "}"))  // forced_token='}'
         )
         {
-            D(fprintf(stderr, "%*c+ gstring_replacement_field[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "'{' star_expressions [\"!\" NAME] [':' gstring_format_spec*] &&'}'"));
+            D(fprintf(stderr, "%*c+ gstring_replacement_field[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "'{' star_expressions \"=\"? [\"!\" NAME] [':' gstring_format_spec*] &&'}'"));
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 D(p->level--);
@@ -14537,7 +14540,7 @@ gstring_replacement_field_rule(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _PyPegen_formatted_value ( p , a , conversion , format , EXTRA );
+            _res = _PyPegen_formatted_value ( p , a , debug_expr , conversion , format , EXTRA );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 D(p->level--);
@@ -14547,7 +14550,7 @@ gstring_replacement_field_rule(Parser *p)
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s gstring_replacement_field[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "'{' star_expressions [\"!\" NAME] [':' gstring_format_spec*] &&'}'"));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "'{' star_expressions \"=\"? [\"!\" NAME] [':' gstring_format_spec*] &&'}'"));
     }
     _res = NULL;
   done:

@@ -2614,8 +2614,50 @@ _PyPegen_fstring_bytes_constant_to_unicode(Parser* p, int is_raw, expr_ty consta
                            p->arena);
 }
 
+static asdl_expr_seq *
+unpack_top_level_joined_strs(Parser *p, asdl_expr_seq *raw_expressions)
+{
+    /* The parser might put multiple f-string values into an individual
+     * JoinedStr node at the top level due to stuff like f-string debugging
+     * expressions. This function flattens those and promotes them to the
+     * upper level. Only simplifies AST, but the compiler already takes care
+     * of the regular output, so this is not necessary if you are not going
+     * to expose the output AST to Python level. */
+
+    Py_ssize_t i, n, req_size, raw_size;
+
+    req_size = raw_size = asdl_seq_LEN(raw_expressions);
+    expr_ty expr;
+    for (i = 0; i < raw_size; i++) {
+        expr = asdl_seq_GET(raw_expressions, i);
+        if (expr->kind == JoinedStr_kind) {
+            req_size += asdl_seq_LEN(expr->v.JoinedStr.values) - 1;
+        }
+    }
+
+
+    asdl_expr_seq *expressions = _Py_asdl_expr_seq_new(req_size, p->arena);
+
+    i = 0;
+    while (i < req_size) {
+        expr = asdl_seq_GET(raw_expressions, i);
+        if (expr->kind == JoinedStr_kind) {
+            asdl_expr_seq *values = expr->v.JoinedStr.values;
+            for (n = 0; n < asdl_seq_LEN(values); n++) {
+                asdl_seq_SET(expressions, i, asdl_seq_GET(values, n));
+                i++;
+            }
+        } else {
+            asdl_seq_SET(expressions, i, expr);
+            i++;
+        }
+    }
+    return expressions;
+}
+
 expr_ty
-deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* expr, Token*b) {
+deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* raw_expressions, Token*b) {
+    asdl_expr_seq *expr = unpack_top_level_joined_strs(p, raw_expressions);
     Py_ssize_t n_items = asdl_seq_LEN(expr);
 
     const char* quote_str = PyBytes_AsString(a->bytes);
@@ -2700,10 +2742,9 @@ expr_ty _PyPegen_constant_from_token(Parser* p, Token* tok) {
     return _PyAST_Constant(s, kind, tok->lineno, tok->col_offset, tok->end_lineno, tok->end_col_offset, p->arena);
 }
 
-expr_ty _PyPegen_formatted_value(Parser *p, expr_ty expression, expr_ty conversion,
-                     expr_ty format, int lineno, int col_offset, int end_lineno,
-                     int end_col_offset, PyArena *arena) {
-
+expr_ty _PyPegen_formatted_value(Parser *p, expr_ty expression, Token *debug, expr_ty conversion,
+                                 expr_ty format, int lineno, int col_offset, int end_lineno, int end_col_offset,
+                                 PyArena *arena) {
     int conversion_val = -1;
     if (conversion != NULL) {
         assert(conversion->kind == Name_kind);
@@ -2714,7 +2755,45 @@ expr_ty _PyPegen_formatted_value(Parser *p, expr_ty expression, expr_ty conversi
         const char* id = PyUnicode_AsUTF8(conversion->v.Name.id);
         conversion_val = (int)(id[0]);
     }
-    return _PyAST_FormattedValue(expression, conversion_val, format, lineno, col_offset, end_lineno, end_col_offset, arena);
+    else if (debug && !format) {
+        /* If no conversion is specified, use !r for debug expressions */
+        conversion_val = (int)'r';
+    }
+
+    expr_ty formatted_value = _PyAST_FormattedValue(
+        expression, conversion_val, format,
+        lineno, col_offset, end_lineno,
+        end_col_offset, arena
+    );
+
+    if (debug) {
+        /* Find the non whitespace token after the "=" */
+        int debug_end_line, debug_end_offset;
+
+        if (conversion) {
+            debug_end_line = conversion->lineno;
+            debug_end_offset = conversion->col_offset;
+        }
+        else if (format) {
+            debug_end_line = format->lineno;
+            debug_end_offset = format->col_offset + 1; // HACK: ??
+        }
+        else {
+            debug_end_line = end_lineno;
+            debug_end_offset = end_col_offset;
+        }
+
+        expr_ty debug_text = _PyPegen_FetchRawForm(p, lineno, col_offset + 1,
+                                                   debug_end_line, debug_end_offset - 1);
+
+        asdl_expr_seq *values = _Py_asdl_expr_seq_new(2, arena);
+        asdl_seq_SET(values, 0, debug_text);
+        asdl_seq_SET(values, 1, formatted_value);
+        return _PyAST_JoinedStr(values, lineno, col_offset, debug_end_line, debug_end_offset, p->arena);
+    }
+    else {
+        return formatted_value;
+    }
 }
 
 expr_ty
@@ -2805,4 +2884,18 @@ error:
         raise_decode_error(p);
     }
     return NULL;
+}
+
+expr_ty
+_PyPegen_FetchRawForm(Parser *p, int lineno, int col_offset, int end_lineno,
+                      int end_col_offset)
+{
+    PyObject *res = PyUnicode_DecodeUTF8(p->tok->buf + col_offset, end_col_offset-col_offset, NULL);
+    if (_PyArena_AddPyObject(p->arena, res) < 0) {
+        Py_DECREF(res);
+        return NULL;
+    }
+
+    assert(lineno == end_lineno);
+    return _PyAST_Constant(res, NULL, lineno, col_offset, end_lineno, end_col_offset, p->arena);
 }

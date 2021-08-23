@@ -1156,8 +1156,6 @@ x = (
         self.assertEqual(eval('f"\\\n"'), '')
         self.assertEqual(eval('f"\\\r"'), '')
 
-    ### remove!
-    """
     def test_debug_conversion(self):
         x = 'A string'
         self.assertEqual(f'{x=}', 'x=' + repr(x))
@@ -1190,12 +1188,15 @@ x = (
         # Make sure text before and after an expression with = works
         # correctly.
         pi = 'π'
-        ###self.assertEqual(f'alpha α {pi=} ω omega', "alpha α pi='π' ω omega")
+        self.assertEqual(f'alpha α {pi=} ω omega', "alpha α pi='π' ω omega")
 
+        ###remove!
+        """
         # Check multi-line expressions.
         self.assertEqual(f'''{
 3
 =}''', '\n3\n=3')
+        """
 
         # Since = is handled specially, make sure all existing uses of
         # it still work.
@@ -1213,7 +1214,7 @@ x = (
         x = 20
         # This isn't an assignment expression, it's 'x', with a format
         # spec of '=10'.  See test_walrus: you need to use parens.
-        self.assertEqual(f'{x:=10}', '        20')
+        ###self.assertEqual(f'{x:=10}', '        20')
 
         # Test named function parameters, to make sure '=' parsing works
         # there.
@@ -1263,6 +1264,7 @@ x = (
         #self.assertEqual(f'X{x =       }Y', 'Xx\t=\t'+repr(x)+'Y')
 
 
+    """
     def test_walrus(self):
         x = 20
         # This isn't an assignment expression, it's 'x', with a format
