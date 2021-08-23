@@ -352,6 +352,24 @@ tok_concatenate_interactive_new_line(struct tok_state *tok, const char *line) {
 }
 
 
+/* Traverse and update all f-string buffers with the value */
+static void
+update_buffers(struct tok_state *tok, char value, int regular, int multiline)
+{
+    int index;
+    tokenizer_mode *mode;
+
+    for (index = tok->tok_mode_stack_index; index >= 0; --index) {
+        mode = &(tok->tok_mode_stack[index]);
+        if (regular && mode->f_string_start != NULL) {
+            mode->f_string_start += value;
+        }
+        if (multiline && mode->f_string_multi_line_start != NULL) {
+            mode->f_string_multi_line_start += value;
+        }
+    }
+}
+
 /* Read a line of text from TOK into S, using the stream in TOK.
    Return NULL on failure, else S.
 
@@ -379,9 +397,10 @@ tok_reserve_buf(struct tok_state *tok, Py_ssize_t size)
         Py_ssize_t line_start = tok->start == NULL ? -1 : tok->line_start - tok->buf;
         Py_ssize_t multi_line_start = tok->multi_line_start - tok->buf;
 
+        int index;
         tokenizer_mode *mode;
-        int index = tok->tok_mode_stack_index;
-        for (; index >= 0; --index) {
+        for (index = tok->tok_mode_stack_index; index >= 0; --index) {
+            printf("Processing: %d\n", index);
             mode = &(tok->tok_mode_stack[index]);
             if (mode->f_string_start != NULL) {
                 mode->f_string_start -= *tok->buf;
@@ -404,8 +423,7 @@ tok_reserve_buf(struct tok_state *tok, Py_ssize_t size)
         tok->line_start = line_start < 0 ? NULL : tok->buf + line_start;
         tok->multi_line_start = multi_line_start < 0 ? NULL : tok->buf + multi_line_start;
 
-        index = 0;
-        for (; index <= tok->tok_mode_stack_index; ++index) {
+        for (index = 0; index <= tok->tok_mode_stack_index; ++index) {
             mode = &(tok->tok_mode_stack[index]);
             if (mode->f_string_start != NULL) {
                 mode->f_string_start += *tok->buf;
@@ -928,10 +946,8 @@ tok_underflow_interactive(struct tok_state *tok) {
         tok->done = E_EOF;
     }
     else if (tok->start != NULL) {
-        tokenizer_mode *current_tok = &(tok->tok_mode_stack[tok->tok_mode_stack_index]);
         Py_ssize_t cur_multi_line_start = tok->multi_line_start - tok->buf;
-        // TODO: Fix *all* levels of f-string multiline start
-        Py_ssize_t cur_fstring_multi_line_start = current_tok->f_string_multi_line_start - tok->buf;
+        update_buffers(tok, -*tok->buf, /*regular=*/0, /*regular=*/1);
         size_t size = strlen(newtok);
         tok->lineno++;
         if (!tok_reserve_buf(tok, size + 1)) {
@@ -944,7 +960,7 @@ tok_underflow_interactive(struct tok_state *tok) {
         PyMem_Free(newtok);
         tok->inp += size;
         tok->multi_line_start = tok->buf + cur_multi_line_start;
-        current_tok->f_string_multi_line_start = tok->buf + cur_fstring_multi_line_start;
+        update_buffers(tok, *tok->buf, /*regular=*/0, /*regular=*/1);
     }
     else {
         tok->lineno++;
