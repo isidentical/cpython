@@ -374,15 +374,22 @@ tok_reserve_buf(struct tok_state *tok, Py_ssize_t size)
     Py_ssize_t oldsize = tok->inp - tok->buf;
     Py_ssize_t newsize = oldsize + Py_MAX(size, oldsize >> 1);
     if (newsize > tok->end - tok->buf) {
-        tokenizer_mode *current_tok = &(tok->tok_mode_stack[tok->tok_mode_stack_index]);
         char *newbuf = tok->buf;
         Py_ssize_t start = tok->start == NULL ? -1 : tok->start - tok->buf;
         Py_ssize_t line_start = tok->start == NULL ? -1 : tok->line_start - tok->buf;
         Py_ssize_t multi_line_start = tok->multi_line_start - tok->buf;
 
-        // TODO: Fix f-string buffer references
-        Py_ssize_t fstring_start = current_tok->f_string_start == NULL ? -1 : current_tok->f_string_start - tok->buf;
-        Py_ssize_t fstring_multi_line_start = current_tok->f_string_multi_line_start - tok->buf;
+        tokenizer_mode *mode;
+        int index = tok->tok_mode_stack_index;
+        for (; index >= 0; --index) {
+            mode = &(tok->tok_mode_stack[index]);
+            if (mode->f_string_start != NULL) {
+                mode->f_string_start -= *tok->buf;
+            }
+            if (mode->f_string_multi_line_start != NULL) {
+                mode->f_string_multi_line_start -= *tok->buf;
+            }
+        }
 
         newbuf = (char *)PyMem_Realloc(newbuf, newsize);
         if (newbuf == NULL) {
@@ -396,8 +403,17 @@ tok_reserve_buf(struct tok_state *tok, Py_ssize_t size)
         tok->start = start < 0 ? NULL : tok->buf + start;
         tok->line_start = line_start < 0 ? NULL : tok->buf + line_start;
         tok->multi_line_start = multi_line_start < 0 ? NULL : tok->buf + multi_line_start;
-        current_tok->f_string_start = fstring_start < 0 ? NULL : tok->buf + fstring_start;
-        current_tok->f_string_multi_line_start= fstring_multi_line_start < 0 ? NULL : tok->buf + fstring_multi_line_start;
+
+        index = 0;
+        for (; index <= tok->tok_mode_stack_index; ++index) {
+            mode = &(tok->tok_mode_stack[index]);
+            if (mode->f_string_start != NULL) {
+                mode->f_string_start += *tok->buf;
+            }
+            if (mode->f_string_multi_line_start != NULL) {
+                mode->f_string_multi_line_start += *tok->buf;
+            }
+        }
     }
     return 1;
 }
