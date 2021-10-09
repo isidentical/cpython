@@ -370,6 +370,57 @@ update_fstring_buffers(struct tok_state *tok, char value, int regular, int multi
     }
 }
 
+static int
+update_fstring_expr(struct tok_state *tok, char cur)
+{
+    if (!tok->cur || !tok->tok_mode_stack_index) {
+        return 1;
+    }
+
+    Py_ssize_t size = strlen(tok->cur);
+    tokenizer_mode *tok_mode = &(tok->tok_mode_stack[tok->tok_mode_stack_index]);
+
+    switch (cur) {
+        case '{':
+            if (tok_mode->last_expr_buffer != NULL) {
+                PyMem_Free(tok_mode->last_expr_buffer);
+            }
+            tok_mode->last_expr_buffer = PyMem_Malloc(size);
+            if (tok_mode->last_expr_buffer == NULL) {
+                tok->done = E_NOMEM;
+                return 0;
+            }
+            tok_mode->last_expr_size = size;
+            tok_mode->last_expr_end = -1;
+            strncpy(tok_mode->last_expr_buffer, tok->cur, size);
+            break;
+        case 0:
+            if (!tok_mode->last_expr_buffer || tok_mode->last_expr_end >= 0) {
+                return 1;
+            }
+            tok_mode->last_expr_buffer = PyMem_Realloc(
+                tok_mode->last_expr_buffer,
+                tok_mode->last_expr_size + size
+            );
+            if (tok_mode->last_expr_buffer == NULL) {
+                tok->done = E_NOMEM;
+                return 0;
+            }
+            strncpy(tok_mode->last_expr_buffer + tok_mode->last_expr_size, tok->cur, size);
+            tok_mode->last_expr_size += size;
+            break;
+        case '}':
+        case '!':
+        case ':':
+            if (tok_mode->last_expr_end == -1) {
+                tok_mode->last_expr_end = strlen(tok->start);
+            }
+            break;
+    }
+
+    return 1;
+}
+
 /* Read a line of text from TOK into S, using the stream in TOK.
    Return NULL on failure, else S.
 
@@ -838,6 +889,9 @@ tok_readline_raw(struct tok_state *tok)
         if (line == NULL) {
             return 1;
         }
+        if (!update_fstring_expr(tok, 0)) {
+            return 0;
+        }
         if (tok->fp_interactive &&
             tok_concatenate_interactive_new_line(tok, line) == -1) {
             return 0;
@@ -953,6 +1007,10 @@ tok_underflow_interactive(struct tok_state *tok) {
         if (tok->prompt != NULL) {
             PySys_WriteStderr("\n");
         }
+        return 0;
+    }
+
+    if (!update_fstring_expr(tok, 0)) {
         return 0;
     }
     return 1;
@@ -1962,6 +2020,9 @@ tok_get_normal_mode(struct tok_state *tok, tokenizer_mode* current_tok, const ch
         current_tok->f_string_quote_size = quote_size;
         current_tok->f_string_start = tok->start;
         current_tok->f_string_multi_line_start = tok->line_start;
+        current_tok->last_expr_buffer = NULL;
+        current_tok->last_expr_size = 0;
+        current_tok->last_expr_end = -1;
 
         switch (*tok->start) {
             case 'f':
@@ -2084,11 +2145,22 @@ tok_get_normal_mode(struct tok_state *tok, tokenizer_mode* current_tok, const ch
     }
 
     /* Punctuation character */
-    if (tok->tok_mode_stack_index > 0 && c == ':' && current_tok->bracket_stack - 1 == current_tok->bracket_mark[current_tok->bracket_mark_index]) {
-        current_tok->kind = TOK_FSTRING_MODE;
-        *p_start = tok->start;
-        *p_end = tok->cur;
-        return PyToken_OneChar(c);
+    if (
+        tok->tok_mode_stack_index > 0 &&
+        current_tok->bracket_stack - (c != '{') == current_tok->bracket_mark[current_tok->bracket_mark_index]
+    ) {
+        if (c == ':' || c == '}' || c == '!' || c == '{') {
+            if (!update_fstring_expr(tok, c)) {
+                return 0;
+            }
+        }
+
+        if (c == ':') {
+            current_tok->kind = TOK_FSTRING_MODE;
+            *p_start = tok->start;
+            *p_end = tok->cur;
+            return PyToken_OneChar(c);
+        }
     }
 
     /* Check for two-character token */
@@ -2269,6 +2341,13 @@ tok_get_fstring_mode(struct tok_state *tok, tokenizer_mode* current_tok, const c
                 }
             }
         }
+    }
+
+    if (current_tok->last_expr_buffer != NULL) {
+        PyMem_Free(current_tok->last_expr_buffer);
+        current_tok->last_expr_buffer = NULL;
+        current_tok->last_expr_size = 0;
+        current_tok->last_expr_end = -1;
     }
 
     *p_start = tok->start;

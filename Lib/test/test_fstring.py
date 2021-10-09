@@ -1189,13 +1189,10 @@ x = (
         pi = 'π'
         self.assertEqual(f'alpha α {pi=} ω omega', "alpha α pi='π' ω omega")
 
-        ###remove!
-        """
         # Check multi-line expressions.
         self.assertEqual(f'''{
 3
 =}''', '\n3\n=3')
-        """
 
         # Since = is handled specially, make sure all existing uses of
         # it still work.

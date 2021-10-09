@@ -2822,6 +2822,27 @@ expr_ty _PyPegen_constant_from_token(Parser* p, Token* tok) {
     return _PyAST_Constant(s, kind, tok->lineno, tok->col_offset, tok->end_lineno, tok->end_col_offset, p->arena);
 }
 
+expr_ty
+decode_fstring_buffer(Parser *p, int lineno, int col_offset, int end_lineno,
+                      int end_col_offset)
+{
+    tokenizer_mode *tok_mode = &(p->tok->tok_mode_stack[p->tok->tok_mode_stack_index]);
+    assert(tok_mode->last_expr_buffer != NULL);
+    assert(tok_mode->last_expr_size >= 0 && tok_mode->last_expr_end >= 0);
+
+    PyObject *res = PyUnicode_DecodeUTF8(
+        tok_mode->last_expr_buffer,
+        tok_mode->last_expr_size - tok_mode->last_expr_end,
+        NULL
+    );
+    if (!res || _PyArena_AddPyObject(p->arena, res) < 0) {
+        Py_XDECREF(res);
+        return NULL;
+    }
+
+    return _PyAST_Constant(res, NULL, lineno, col_offset, end_lineno, end_col_offset, p->arena);
+}
+
 expr_ty _PyPegen_formatted_value(Parser *p, expr_ty expression, Token *debug, expr_ty conversion,
                                  expr_ty format, int lineno, int col_offset, int end_lineno, int end_col_offset,
                                  PyArena *arena) {
@@ -2863,8 +2884,11 @@ expr_ty _PyPegen_formatted_value(Parser *p, expr_ty expression, Token *debug, ex
             debug_end_offset = end_col_offset;
         }
 
-        expr_ty debug_text = _PyPegen_FetchRawForm(p, lineno, col_offset + 1,
+        expr_ty debug_text = decode_fstring_buffer(p, lineno, col_offset + 1,
                                                    debug_end_line, debug_end_offset - 1);
+        if (!debug_text) {
+            return NULL;
+        }
 
         asdl_expr_seq *values = _Py_asdl_expr_seq_new(2, arena);
         asdl_seq_SET(values, 0, debug_text);
@@ -2964,18 +2988,4 @@ error:
         raise_decode_error(p);
     }
     return NULL;
-}
-
-expr_ty
-_PyPegen_FetchRawForm(Parser *p, int lineno, int col_offset, int end_lineno,
-                      int end_col_offset)
-{
-    PyObject *res = PyUnicode_DecodeUTF8(p->tok->buf + col_offset, end_col_offset-col_offset, NULL);
-    if (_PyArena_AddPyObject(p->arena, res) < 0) {
-        Py_DECREF(res);
-        return NULL;
-    }
-
-    assert(lineno == end_lineno);
-    return _PyAST_Constant(res, NULL, lineno, col_offset, end_lineno, end_col_offset, p->arena);
 }

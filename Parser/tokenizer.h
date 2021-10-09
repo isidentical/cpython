@@ -46,6 +46,10 @@ typedef struct _tokenizer_mode {
     int f_string_raw;
     const char* f_string_start; 
     const char* f_string_multi_line_start; 
+
+    int last_expr_size;
+    int last_expr_end;
+    char* last_expr_buffer;
 } tokenizer_mode;
 
 /* Tokenizer state */
