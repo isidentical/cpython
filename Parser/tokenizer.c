@@ -2147,7 +2147,7 @@ tok_get_normal_mode(struct tok_state *tok, tokenizer_mode* current_tok, const ch
     /* Punctuation character */
     if (
         tok->tok_mode_stack_index > 0 &&
-        current_tok->bracket_stack - (c != '{') == current_tok->bracket_mark[current_tok->bracket_mark_index]
+        current_tok->bracket_stack - (c != '{') == 0
     ) {
         if (c == ':' || c == '}' || c == '!' || c == '{') {
             if (!update_fstring_expr(tok, c)) {
