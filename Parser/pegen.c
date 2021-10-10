@@ -2696,7 +2696,7 @@ unpack_top_level_joined_strs(Parser *p, asdl_expr_seq *raw_expressions)
      * of the regular output, so this is not necessary if you are not going
      * to expose the output AST to Python level. */
 
-    Py_ssize_t i, n, req_size, raw_size;
+    Py_ssize_t i, req_size, raw_size;
 
     req_size = raw_size = asdl_seq_LEN(raw_expressions);
     expr_ty expr;
@@ -2707,21 +2707,20 @@ unpack_top_level_joined_strs(Parser *p, asdl_expr_seq *raw_expressions)
         }
     }
 
-
     asdl_expr_seq *expressions = _Py_asdl_expr_seq_new(req_size, p->arena);
 
-    i = 0;
-    while (i < req_size) {
-        expr = asdl_seq_GET(raw_expressions, i);
+    Py_ssize_t raw_index, req_index = 0;
+    for (raw_index = 0; raw_index < raw_size; raw_index++) {
+        expr = asdl_seq_GET(raw_expressions, raw_index);
         if (expr->kind == JoinedStr_kind) {
             asdl_expr_seq *values = expr->v.JoinedStr.values;
-            for (n = 0; n < asdl_seq_LEN(values); n++) {
-                asdl_seq_SET(expressions, i, asdl_seq_GET(values, n));
-                i++;
+            for (Py_ssize_t n = 0; n < asdl_seq_LEN(values); n++) {
+                asdl_seq_SET(expressions, req_index, asdl_seq_GET(values, n));
+                req_index++;
             }
         } else {
-            asdl_seq_SET(expressions, i, expr);
-            i++;
+            asdl_seq_SET(expressions, req_index, expr);
+            req_index++;
         }
     }
     return expressions;
