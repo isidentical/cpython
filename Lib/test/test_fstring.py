@@ -1249,6 +1249,7 @@ x = (
         self.assertEqual(f'X{x  =}Y', 'Xx  ='+repr(x)+'Y')
         self.assertEqual(f'X{x=  }Y', 'Xx=  '+repr(x)+'Y')
         self.assertEqual(f'X{x  =  }Y', 'Xx  =  '+repr(x)+'Y')
+        self.assertEqual(f"sadsd {1 + 1 =  :{1 + 1:1d}f}", "sadsd 1 + 1 =  2.000000")
 
         # These next lines contains tabs.  Backslash escapes don't
         # work in f-strings.
