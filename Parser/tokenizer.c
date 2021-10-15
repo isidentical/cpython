@@ -373,9 +373,7 @@ update_fstring_buffers(struct tok_state *tok, char value, int regular, int multi
 static int
 update_fstring_expr(struct tok_state *tok, char cur)
 {
-    if (!tok->cur || !tok->tok_mode_stack_index) {
-        return 1;
-    }
+    assert(tok->cur != NULL);
 
     Py_ssize_t size = strlen(tok->cur);
     tokenizer_mode *tok_mode = &(tok->tok_mode_stack[tok->tok_mode_stack_index]);
@@ -889,7 +887,7 @@ tok_readline_raw(struct tok_state *tok)
         if (line == NULL) {
             return 1;
         }
-        if (!update_fstring_expr(tok, 0)) {
+        if (tok->tok_mode_stack_index && !update_fstring_expr(tok, 0)) {
             return 0;
         }
         if (tok->fp_interactive &&
@@ -1010,7 +1008,7 @@ tok_underflow_interactive(struct tok_state *tok) {
         return 0;
     }
 
-    if (!update_fstring_expr(tok, 0)) {
+    if (tok->tok_mode_stack_index && !update_fstring_expr(tok, 0)) {
         return 0;
     }
     return 1;
