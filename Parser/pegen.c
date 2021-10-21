@@ -2828,12 +2828,16 @@ expr_ty _PyPegen_formatted_value(Parser *p, expr_ty expression, Token *debug, ex
     int conversion_val = -1;
     if (conversion != NULL) {
         assert(conversion->kind == Name_kind);
-        if (PyUnicode_GetLength(conversion->v.Name.id) != 1) {
-            RAISE_SYNTAX_ERROR_KNOWN_LOCATION(conversion, "Invalid conversion character");
+        Py_UCS4 first = PyUnicode_READ_CHAR(conversion->v.Name.id, 0);
+
+        if (PyUnicode_GET_LENGTH(conversion->v.Name.id) > 1 ||
+            !(first == 's' || first == 'r' || first == 'a')) {
+            RAISE_SYNTAX_ERROR_KNOWN_LOCATION(conversion,
+                                              "f-string: invalid conversion character: expected 's', 'r', or 'a'");
             return NULL;
         }
-        const char* id = PyUnicode_AsUTF8(conversion->v.Name.id);
-        conversion_val = (int)(id[0]);
+
+        conversion_val = Py_SAFE_DOWNCAST(first, Py_UCS4, int);
     }
     else if (debug && !format) {
         /* If no conversion is specified, use !r for debug expressions */
