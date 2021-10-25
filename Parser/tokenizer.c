@@ -396,14 +396,16 @@ update_fstring_expr(struct tok_state *tok, char cur)
             if (!tok_mode->last_expr_buffer || tok_mode->last_expr_end >= 0) {
                 return 1;
             }
-            tok_mode->last_expr_buffer = PyMem_Realloc(
+            char *new_buffer = PyMem_Realloc(
                 tok_mode->last_expr_buffer,
                 tok_mode->last_expr_size + size
             );
-            if (tok_mode->last_expr_buffer == NULL) {
+            if (new_buffer == NULL) {
+                PyMem_Free(tok_mode->last_expr_buffer);
                 tok->done = E_NOMEM;
                 return 0;
             }
+            tok_mode->last_expr_buffer = new_buffer;
             strncpy(tok_mode->last_expr_buffer + tok_mode->last_expr_size, tok->cur, size);
             tok_mode->last_expr_size += size;
             break;
