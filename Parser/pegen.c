@@ -2661,7 +2661,9 @@ expr_ty _PyPegen_collect_call_seqs(Parser *p, asdl_expr_seq *a, asdl_seq *b,
 
 static expr_ty
 _PyPegen_fstring_bytes_constant_to_unicode(Parser* p, int is_raw, expr_ty constant) {
-    const char* bstr = PyBytes_AsString(constant->v.Constant.value);
+    assert(PyUnicode_CheckExact(constant->v.Constant.value));
+
+    const char* bstr = PyUnicode_AsUTF8(constant->v.Constant.value);
     if (bstr == NULL) {
         return NULL;
     }
@@ -2670,11 +2672,12 @@ _PyPegen_fstring_bytes_constant_to_unicode(Parser* p, int is_raw, expr_ty consta
     if (strcmp(bstr, "{{") == 0 || strcmp(bstr, "}}") == 0) {
         len = 1;
     } else {
-        len = PyBytes_GET_SIZE(constant->v.Constant.value);
+        len = PyUnicode_GET_LENGTH(constant->v.Constant.value);
     }
 
     PyObject *str = _PyPegen_DecodeFstring(p, is_raw, bstr, len, NULL);
     if (str == NULL) {
+        raise_decode_error(p);
         return NULL;
     }
     if (_PyArena_AddPyObject(p->arena, str) < 0) {
@@ -2736,7 +2739,7 @@ deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* raw_expressions, Token*b)
         return NULL;
     }
 
-    int is_raw = strchr(quote_str, 'r') == NULL;
+    int is_raw = strchr(quote_str, 'r') != NULL;
     const char* _str = PyBytes_AsString(b->bytes);
     if (_str == NULL) {
         return NULL;
@@ -2750,7 +2753,7 @@ deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* raw_expressions, Token*b)
     Py_ssize_t i = 0;
     for (i= 0; i < asdl_seq_LEN(expr); i++) {
         expr_ty item = asdl_seq_GET(expr, i);
-        if (item->kind == Constant_kind && PyBytes_CheckExact(item->v.Constant.value)) {
+        if (item->kind == Constant_kind) {
             item = _PyPegen_fstring_bytes_constant_to_unicode(p, is_raw, item);
             if (item == NULL) {
                 return NULL;
@@ -2775,7 +2778,15 @@ deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* raw_expressions, Token*b)
         if (the_str == NULL) {
             return NULL;
         }
-        asdl_seq_SET(seq, n_items, the_str);
+        
+        expr_ty decoded_str = _PyPegen_fstring_bytes_constant_to_unicode(
+            p, is_raw, the_str
+        );
+        if (decoded_str == NULL) {
+            return NULL;
+        }
+
+        asdl_seq_SET(seq, n_items, decoded_str);
     }
     return _PyAST_JoinedStr(seq, a->lineno, a->col_offset,
                             b->end_lineno, b->end_col_offset,
@@ -2813,6 +2824,7 @@ expr_ty _PyPegen_constant_from_token(Parser* p, Token* tok) {
     const char *fstr;
     Py_ssize_t fstrlen = -1;
     if (_PyPegen_parsestr(p, &this_bytesmode, &this_rawmode, &s, &fstr, &fstrlen, tok) != 0) {
+        raise_decode_error(p);
         return NULL;
     }
     PyObject *kind = NULL;
