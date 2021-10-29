@@ -2660,7 +2660,7 @@ expr_ty _PyPegen_collect_call_seqs(Parser *p, asdl_expr_seq *a, asdl_seq *b,
 }
 
 static expr_ty
-_PyPegen_fstring_bytes_constant_to_unicode(Parser* p, int is_raw, expr_ty constant) {
+_PyPegen_decode_fstring_part(Parser* p, int is_raw, expr_ty constant) {
     assert(PyUnicode_CheckExact(constant->v.Constant.value));
 
     const char* bstr = PyUnicode_AsUTF8(constant->v.Constant.value);
@@ -2754,7 +2754,7 @@ deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* raw_expressions, Token*b)
     for (i= 0; i < asdl_seq_LEN(expr); i++) {
         expr_ty item = asdl_seq_GET(expr, i);
         if (item->kind == Constant_kind) {
-            item = _PyPegen_fstring_bytes_constant_to_unicode(p, is_raw, item);
+            item = _PyPegen_decode_fstring_part(p, is_raw, item);
             if (item == NULL) {
                 return NULL;
             }
@@ -2778,8 +2778,8 @@ deal_with_gstring2(Parser *p, Token* a, asdl_expr_seq* raw_expressions, Token*b)
         if (the_str == NULL) {
             return NULL;
         }
-        
-        expr_ty decoded_str = _PyPegen_fstring_bytes_constant_to_unicode(
+
+        expr_ty decoded_str = _PyPegen_decode_fstring_part(
             p, is_raw, the_str
         );
         if (decoded_str == NULL) {
