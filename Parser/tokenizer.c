@@ -1297,6 +1297,36 @@ error:
 }
 
 static int
+warn_invalid_escape_sequence(struct tok_state *tok, const char first_invalid_escape_char)
+{
+    PyObject *msg = PyUnicode_FromFormat(
+        "invalid escape sequence '\\%c'",
+        first_invalid_escape_char
+    );
+
+    if (msg == NULL) {
+        return -1;
+    }
+
+    if (PyErr_WarnExplicitObject(PyExc_DeprecationWarning, msg, tok->filename,
+                                 tok->lineno, NULL, NULL) < 0) {
+        Py_DECREF(msg);
+
+        if (PyErr_ExceptionMatches(PyExc_DeprecationWarning)) {
+            /* Replace the DeprecationWarning exception with a SyntaxError
+               to get a more accurate error report */
+            PyErr_Clear();
+            return syntaxerror(tok, "invalid escape sequence '\\%c'", first_invalid_escape_char);
+        }
+
+        return -1;
+    }
+
+    Py_DECREF(msg);
+    return 0;
+}
+
+static int
 lookahead(struct tok_state *tok, const char *test)
 {
     const char *s = test;
@@ -2358,6 +2388,9 @@ tok_get_fstring_mode(struct tok_state *tok, tokenizer_mode* current_tok, const c
                     } else {
                         tok_backup(tok, peek);
                     }
+                } else if (peek == '{') {
+                    warn_invalid_escape_sequence(tok, peek);
+                    tok_backup(tok, peek);
                 }
             }
         }
