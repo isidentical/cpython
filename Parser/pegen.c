@@ -2672,7 +2672,7 @@ _PyPegen_decode_fstring_part(Parser* p, int is_raw, expr_ty constant) {
     if (strcmp(bstr, "{{") == 0 || strcmp(bstr, "}}") == 0) {
         len = 1;
     } else {
-        len = PyUnicode_GET_LENGTH(constant->v.Constant.value);
+        len = strlen(bstr);
     }
 
     PyObject *str = _PyPegen_DecodeFstring(p, is_raw, bstr, len, NULL);
