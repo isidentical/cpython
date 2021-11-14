@@ -2310,10 +2310,15 @@ tok_get_fstring_mode(struct tok_state *tok, tokenizer_mode* current_tok, const c
                                 " line %d)", start);
             }
         }
+
         if (c == current_tok->f_string_quote) {
             end_quote_size += 1;
+            continue;
+        } else {
+            end_quote_size = 0;
         }
-        else if (c == '{') {
+
+        if (c == '{') {
             char peek = tok_nextc(tok);
             if (peek != '{') {
                 tok_backup(tok, peek);
@@ -2347,7 +2352,6 @@ tok_get_fstring_mode(struct tok_state *tok, tokenizer_mode* current_tok, const c
             return FSTRING_MIDDLE;
         }
         else if (!current_tok->f_string_raw) {
-            end_quote_size = 0;
             if (c == '\\') {
                 char peek = tok_nextc(tok);
                 if (peek == 'N') {
