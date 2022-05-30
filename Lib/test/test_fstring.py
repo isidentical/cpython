@@ -589,6 +589,7 @@ x = (
         self.assertEqual(f'{-10:-{"#"}1{0}x}', '      -0xa')
         self.assertEqual(f'{-10:{"-"}#{1}0{"x"}}', '      -0xa')
         self.assertEqual(f'{10:#{3 != {4:5} and width}x}', '       0xa')
+        self.assertEqual(f'result: {value:{width:{0}}.{precision:1}}', 'result:      12.35')
 
         self.assertAllRaise(SyntaxError, "f-string: expecting '}'",
                             ["""f'{"s"!r{":10"}}'""",
@@ -599,11 +600,6 @@ x = (
         self.assertAllRaise(SyntaxError, "f-string: invalid syntax",
                             [# Invalid syntax inside a nested spec.
                              "f'{4:{/5}}'",
-                             ])
-
-        self.assertAllRaise(SyntaxError, "f-string: expressions nested too deeply",
-                            [# Can't nest format specifiers.
-                             "f'result: {value:{width:{0}}.{precision:1}}'",
                              ])
 
         self.assertAllRaise(SyntaxError, 'f-string: invalid conversion character',
@@ -1273,6 +1269,7 @@ x = (
         self.assertEqual(f'X{x  =}Y', 'Xx  ='+repr(x)+'Y')
         self.assertEqual(f'X{x=  }Y', 'Xx=  '+repr(x)+'Y')
         self.assertEqual(f'X{x  =  }Y', 'Xx  =  '+repr(x)+'Y')
+        self.assertEqual(f"sadsd {1 + 1 =  :{1 + 1:1d}f}", "sadsd 1 + 1 =  2.000000")
 
         # These next lines contains tabs.  Backslash escapes don't
         # work in f-strings.
@@ -1282,6 +1279,7 @@ x = (
         # the tabs to spaces just to shut up patchcheck.
         #self.assertEqual(f'X{x =}Y', 'Xx\t='+repr(x)+'Y')
         #self.assertEqual(f'X{x =       }Y', 'Xx\t=\t'+repr(x)+'Y')
+
 
     def test_walrus(self):
         x = 20
